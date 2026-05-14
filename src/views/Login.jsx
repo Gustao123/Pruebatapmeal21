@@ -14,9 +14,9 @@ const Login = () => {
   if (rol === "admin") {
     navegar("/categorias");
   } else if (rol === "cliente") {
-    navegar("/menu"); // ✅ antes decía /menu-cliente
+    navegar("/"); // ✅ antes decía /menu-cliente
   } else {
-    navegar("/menu");
+    navegar("/");
   }
 };
 
