@@ -142,15 +142,19 @@ const Encabezado = () => {
 
   const cerrarSesion = async () => {
 
-    await supabase.auth.signOut();
+  // cerrar menus antes de salir
+  setMostrarMenuCliente(false);
+  setMostrarMenuAdmin(false);
 
-    localStorage.removeItem(
-      "usuario-supabase"
-    );
+  await supabase.auth.signOut();
 
-    navigate("/login");
+  localStorage.removeItem(
+    "usuario-supabase"
+  );
 
-  };
+  navigate("/login");
+
+};
 
   // =========================
   // ACTIVAR LINK
