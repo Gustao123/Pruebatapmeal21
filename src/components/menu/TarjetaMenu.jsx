@@ -6,19 +6,32 @@ import { supabase } from "../../database/supabaseconfig";
 const SIN_COMPLEMENTOS = ["frappés", "bebidas", "postres", "licores"];
 const CON_SALSAS = ["comidas", "alitas"];
 
-const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado }) => {
+const TarjetaMenu = ({
+  platillo,
+  categoriaNombre,
+  extras,
+  onAgregar,
+  esInvitado,
+}) => {
   const [mostrarModal, setMostrarModal] = useState(false);
   const [extraSeleccionado, setExtraSeleccionado] = useState(null);
   const [salsaSeleccionada, setSalsaSeleccionada] = useState(null);
   const [salsas, setSalsas] = useState([]);
+
   const navegar = useNavigate();
 
   const categoriaLower = (categoriaNombre || "").toLowerCase();
-  const aceptaComplementos = !SIN_COMPLEMENTOS.includes(categoriaLower);
-  const aceptaSalsas = CON_SALSAS.includes(categoriaLower);
+  const aceptaComplementos =
+    !SIN_COMPLEMENTOS.includes(categoriaLower);
+  const aceptaSalsas =
+    CON_SALSAS.includes(categoriaLower);
 
   useEffect(() => {
-    if (mostrarModal && aceptaSalsas && salsas.length === 0) {
+    if (
+      mostrarModal &&
+      aceptaSalsas &&
+      salsas.length === 0
+    ) {
       const cargarSalsas = async () => {
         const { data } = await supabase
           .from("Salsas")
@@ -30,11 +43,14 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
 
       cargarSalsas();
     }
-  }, [mostrarModal, aceptaSalsas, salsas.length]);
+  }, [mostrarModal]);
 
   const descripcion = platillo.descripcion || "";
+
   const preview =
-    descripcion.length > 60 ? descripcion.substring(0, 60) + "..." : descripcion;
+    descripcion.length > 60
+      ? descripcion.substring(0, 60) + "..."
+      : descripcion;
 
   const cerrarModal = () => {
     setMostrarModal(false);
@@ -61,22 +77,40 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
   const precioTotal = () => {
     let total = parseFloat(platillo.precio || 0);
 
-    if (extraSeleccionado) total += parseFloat(extraSeleccionado.precio || 0);
-    if (salsaSeleccionada) total += parseFloat(salsaSeleccionada.precio || 0);
+    if (extraSeleccionado) {
+      total += parseFloat(
+        extraSeleccionado.precio || 0
+      );
+    }
+
+    if (salsaSeleccionada) {
+      total += parseFloat(
+        salsaSeleccionada.precio || 0
+      );
+    }
 
     return total;
   };
 
-  const estiloChip = (seleccionado, color = "#ff6a00") => ({
+  const estiloChip = (
+    seleccionado,
+    color = "#ff6a00"
+  ) => ({
     padding: "6px 14px",
     borderRadius: 20,
     fontSize: "0.82rem",
     cursor: "pointer",
     fontWeight: 600,
     transition: "all 0.15s",
-    border: `2px solid ${seleccionado ? color : "#e5e7eb"}`,
-    background: seleccionado ? `${color}14` : "white",
-    color: seleccionado ? color : "#374151",
+    border: `2px solid ${
+      seleccionado ? color : "#e5e7eb"
+    }`,
+    background: seleccionado
+      ? `${color}14`
+      : "white",
+    color: seleccionado
+      ? color
+      : "#374151",
   });
 
   return (
@@ -84,16 +118,23 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
       <Card
         className="h-100 border-0 shadow-sm overflow-hidden"
         style={{
-          borderRadius: 14,
+          borderRadius: 18,
           cursor: "pointer",
-          transition: "transform 0.2s, box-shadow 0.2s",
+          transition:
+            "transform 0.2s, box-shadow 0.2s",
           width: "100%",
-          minWidth: 0,
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-4px)")}
-        onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0)")}
+        onMouseEnter={(e) =>
+          (e.currentTarget.style.transform =
+            "translateY(-4px)")
+        }
+        onMouseLeave={(e) =>
+          (e.currentTarget.style.transform =
+            "translateY(0)")
+        }
         onClick={() => setMostrarModal(true)}
       >
+        {/* Imagen */}
         <div
           style={{
             height: 160,
@@ -111,22 +152,27 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
                 objectFit: "cover",
                 transition: "transform 0.4s",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.08)")}
-              onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.transform =
+                  "scale(1.08)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.transform =
+                  "scale(1)")
+              }
             />
           ) : (
             <div className="d-flex align-items-center justify-content-center h-100">
-              <i className="bi bi-image text-muted" style={{ fontSize: "2.5rem" }} />
+              <i
+                className="bi bi-image text-muted"
+                style={{ fontSize: "2.5rem" }}
+              />
             </div>
           )}
         </div>
 
-        <Card.Body
-          className="p-3 d-flex flex-column"
-          style={{
-            minWidth: 0,
-          }}
-        >
+        {/* Body */}
+        <Card.Body className="p-3 d-flex flex-column">
           <Badge
             bg="warning"
             text="dark"
@@ -134,9 +180,6 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
             className="mb-2 align-self-start"
             style={{
               fontSize: "0.7rem",
-              maxWidth: "100%",
-              whiteSpace: "normal",
-              lineHeight: 1.2,
             }}
           >
             {categoriaNombre}
@@ -148,7 +191,6 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
               color: "#0c0c2c",
               fontSize: "0.92rem",
               lineHeight: 1.25,
-              overflowWrap: "break-word",
             }}
           >
             {platillo.nombre_platillo}
@@ -171,28 +213,28 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
             </p>
           )}
 
+          {/* PRECIO + BOTÓN CORREGIDO */}
           <div
             className="mt-auto pt-2"
             style={{
               display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 6,
+              flexDirection: "column",
+              gap: 8,
               width: "100%",
-              minWidth: 0,
-              overflow: "hidden",
             }}
           >
             <span
               className="fw-bold"
               style={{
                 color: "#ff6a00",
-                fontSize: "clamp(0.9rem, 3.8vw, 1rem)",
+                fontSize: "1rem",
                 whiteSpace: "nowrap",
-                minWidth: 0,
               }}
             >
-              C${parseFloat(platillo.precio || 0).toFixed(2)}
+              C$
+              {parseFloat(
+                platillo.precio || 0
+              ).toFixed(2)}
             </span>
 
             <button
@@ -200,20 +242,16 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
                 background: "#ff6a00",
                 color: "white",
                 border: "none",
-                borderRadius: 8,
-                padding: "5px 9px",
-                fontSize: "0.76rem",
+                borderRadius: 10,
+                padding: "8px 10px",
+                fontSize: "0.78rem",
                 fontWeight: 600,
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 4,
-                flexShrink: 0,
-                maxWidth: 92,
-                overflow: "hidden",
-                whiteSpace: "nowrap",
-                textOverflow: "ellipsis",
+                gap: 6,
+                width: "100%",
               }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -221,22 +259,27 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
               }}
             >
               <i className="bi bi-cart-plus" />
-              <span
-                style={{
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                Agregar
-              </span>
+              Agregar
             </button>
           </div>
         </Card.Body>
       </Card>
 
-      <Modal show={mostrarModal} onHide={cerrarModal} size="lg" centered>
-        <Modal.Header closeButton className="border-0 pb-0">
-          <Modal.Title className="fw-bold" style={{ color: "#0c0c2c" }}>
+      {/* MODAL */}
+      <Modal
+        show={mostrarModal}
+        onHide={cerrarModal}
+        size="lg"
+        centered
+      >
+        <Modal.Header
+          closeButton
+          className="border-0 pb-0"
+        >
+          <Modal.Title
+            className="fw-bold"
+            style={{ color: "#0c0c2c" }}
+          >
             {platillo.nombre_platillo}
           </Modal.Title>
         </Modal.Header>
@@ -247,7 +290,9 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
               {platillo.url_imagen ? (
                 <img
                   src={platillo.url_imagen}
-                  alt={platillo.nombre_platillo}
+                  alt={
+                    platillo.nombre_platillo
+                  }
                   className="img-fluid rounded"
                   style={{
                     maxHeight: 280,
@@ -260,146 +305,71 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
                   className="bg-light rounded d-flex align-items-center justify-content-center"
                   style={{ height: 280 }}
                 >
-                  <i className="bi bi-image text-muted" style={{ fontSize: "3rem" }} />
+                  <i
+                    className="bi bi-image text-muted"
+                    style={{
+                      fontSize: "3rem",
+                    }}
+                  />
                 </div>
               )}
             </div>
 
             <div className="col-md-7 d-flex flex-column">
-              <Badge bg="warning" text="dark" pill className="mb-2 align-self-start">
+              <Badge
+                bg="warning"
+                text="dark"
+                pill
+                className="mb-2 align-self-start"
+              >
                 {categoriaNombre}
               </Badge>
 
-              <h4 className="fw-bold mb-2" style={{ color: "#ff6a00" }}>
-                C${parseFloat(platillo.precio || 0).toFixed(2)}
+              <h4
+                className="fw-bold mb-2"
+                style={{
+                  color: "#ff6a00",
+                }}
+              >
+                C$
+                {parseFloat(
+                  platillo.precio || 0
+                ).toFixed(2)}
               </h4>
 
               {descripcion && (
-                <p className="text-muted" style={{ fontSize: "0.9rem", lineHeight: 1.6 }}>
+                <p className="text-muted">
                   {descripcion}
                 </p>
               )}
 
-              {aceptaComplementos && extras && extras.length > 0 && (
-                <div className="mt-3">
-                  <p
-                    style={{
-                      fontWeight: 700,
-                      fontSize: "0.88rem",
-                      color: "#0c0c2c",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <i className="bi bi-plus-circle me-1" style={{ color: "#ff6a00" }} />
-                    Extras (opcional)
-                  </p>
-
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {extras.map((extra) => (
-                      <div
-                        key={extra.id_extra}
-                        onClick={() =>
-                          setExtraSeleccionado(
-                            extraSeleccionado?.id_extra === extra.id_extra ? null : extra
-                          )
-                        }
-                        style={estiloChip(
-                          extraSeleccionado?.id_extra === extra.id_extra,
-                          "#ff6a00"
-                        )}
-                      >
-                        {extra.descripcion}{" "}
-                        <span style={{ opacity: 0.7 }}>
-                          +C${parseFloat(extra.precio || 0).toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {aceptaSalsas && salsas.length > 0 && (
-                <div className="mt-3">
-                  <p
-                    style={{
-                      fontWeight: 700,
-                      fontSize: "0.88rem",
-                      color: "#0c0c2c",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <i className="bi bi-droplet me-1" style={{ color: "#ef4444" }} />
-                    Salsa (opcional)
-                  </p>
-
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {salsas.map((salsa) => (
-                      <div
-                        key={salsa.id_salsa}
-                        onClick={() =>
-                          setSalsaSeleccionada(
-                            salsaSeleccionada?.id_salsa === salsa.id_salsa ? null : salsa
-                          )
-                        }
-                        style={estiloChip(
-                          salsaSeleccionada?.id_salsa === salsa.id_salsa,
-                          "#ef4444"
-                        )}
-                      >
-                        {salsa.descripcion}{" "}
-                        <span style={{ opacity: 0.7 }}>
-                          +C${parseFloat(salsa.precio || 0).toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {(extraSeleccionado || salsaSeleccionada) && (
+              {(extraSeleccionado ||
+                salsaSeleccionada) && (
                 <div
                   className="mt-3 p-2 rounded"
                   style={{
-                    background: "rgba(255,106,0,0.06)",
-                    border: "1px solid rgba(255,106,0,0.2)",
+                    background:
+                      "rgba(255,106,0,0.06)",
+                    border:
+                      "1px solid rgba(255,106,0,0.2)",
                   }}
                 >
-                  <small className="text-muted">Total con selección:</small>
-                  <div className="fw-bold" style={{ color: "#ff6a00", fontSize: "1.1rem" }}>
-                    C${precioTotal().toFixed(2)}
-                  </div>
-                </div>
-              )}
+                  <small className="text-muted">
+                    Total con selección:
+                  </small>
 
-              {esInvitado && (
-                <div
-                  className="mt-3 p-3 rounded text-center"
-                  style={{
-                    background: "rgba(255,106,0,0.06)",
-                    border: "1px solid rgba(255,106,0,0.2)",
-                  }}
-                >
-                  <p style={{ margin: 0, fontSize: "0.88rem", color: "#92400e" }}>
-                    <i className="bi bi-lock-fill me-2" />
-                    Para agregar al carrito necesitas una cuenta.
-                  </p>
-
-                  <button
-                    onClick={() => navegar("/registro")}
+                  <div
+                    className="fw-bold"
                     style={{
-                      marginTop: 10,
-                      background: "#ff6a00",
-                      color: "white",
-                      border: "none",
-                      borderRadius: 8,
-                      padding: "7px 18px",
-                      fontWeight: 700,
-                      fontSize: "0.85rem",
-                      cursor: "pointer",
+                      color: "#ff6a00",
+                      fontSize: "1.1rem",
                     }}
                   >
-                    Regístrate gratis
-                  </button>
+                    C$
+                    {precioTotal().toFixed(
+                      2
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -407,7 +377,11 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
         </Modal.Body>
 
         <Modal.Footer className="border-0 pt-0">
-          <Button variant="secondary" size="sm" onClick={cerrarModal}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={cerrarModal}
+          >
             Cerrar
           </Button>
 
@@ -423,13 +397,10 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
                 fontSize: "0.9rem",
                 fontWeight: 700,
                 cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
               }}
             >
-              <i className="bi bi-cart-plus" />
-              Agregar al carrito — C${precioTotal().toFixed(2)}
+              Agregar al carrito — C$
+              {precioTotal().toFixed(2)}
             </button>
           )}
         </Modal.Footer>
