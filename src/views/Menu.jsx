@@ -7,7 +7,6 @@ import BotonCarrito from "../components/carrito/BotonCarrito";
 import { useCarrito } from "../components/contexto/CarritoContexto";
 
 const Menu = () => {
-
   const { idMesa } = useParams();
 
   const [platillos, setPlatillos] = useState([]);
@@ -19,15 +18,11 @@ const Menu = () => {
   const [cargando, setCargando] = useState(true);
 
   const { agregarAlCarrito } = useCarrito();
-
   const navegar = useNavigate();
 
   useEffect(() => {
-
     const cargarDatos = async () => {
-
       try {
-
         setCargando(true);
 
         const [resPlatillos, resCategorias, resExtras] = await Promise.all([
@@ -44,29 +39,23 @@ const Menu = () => {
           supabase
             .from("Extras")
             .select("*")
-            .order("descripcion")
+            .order("descripcion"),
         ]);
 
         setPlatillos(resPlatillos.data || []);
         setCategorias(resCategorias.data || []);
         setExtras(resExtras.data || []);
-
       } catch (err) {
-
         console.error(err);
-
       } finally {
-
         setCargando(false);
       }
     };
 
     cargarDatos();
-
   }, []);
 
   const obtenerNombreCategoria = (idCategoria) => {
-
     const categoria = categorias.find(
       (c) => c.id_categoria === idCategoria
     );
@@ -75,19 +64,15 @@ const Menu = () => {
   };
 
   const platillosFiltrados = useMemo(() => {
-
     let filtrados = platillos;
 
     if (categoriaSeleccionada !== "todas") {
-
       filtrados = filtrados.filter(
-        (p) =>
-          p.categoria_platillo === parseInt(categoriaSeleccionada)
+        (p) => p.categoria_platillo === parseInt(categoriaSeleccionada)
       );
     }
 
     if (textoBusqueda.trim()) {
-
       const texto = textoBusqueda.toLowerCase();
 
       filtrados = filtrados.filter(
@@ -98,7 +83,6 @@ const Menu = () => {
     }
 
     return filtrados;
-
   }, [platillos, categoriaSeleccionada, textoBusqueda]);
 
   return (
@@ -107,22 +91,22 @@ const Menu = () => {
         minHeight: "100vh",
         background: "#fafafa",
         paddingBottom: "100px",
+        overflowX: "hidden",
       }}
     >
-
       <BotonCarrito visible={true} />
 
       <div
         style={{
           maxWidth: 1100,
           margin: "0 auto",
-          padding: "25px 20px",
+          padding: "25px 14px",
+          width: "100%",
+          overflowX: "hidden",
         }}
       >
-
         {/* HEADER */}
         <div className="mb-4">
-
           <button
             onClick={() => navegar(-1)}
             className="btn btn-dark mb-3"
@@ -166,20 +150,18 @@ const Menu = () => {
               border: "1px solid #e5e7eb",
             }}
           >
-
             <i className="bi bi-search"></i>
 
             <input
               type="text"
               placeholder="Buscar platillos..."
               value={textoBusqueda}
-              onChange={(e) =>
-                setTextoBusqueda(e.target.value)
-              }
+              onChange={(e) => setTextoBusqueda(e.target.value)}
               style={{
                 border: "none",
                 outline: "none",
                 flex: 1,
+                minWidth: 0,
                 background: "transparent",
               }}
             />
@@ -196,23 +178,16 @@ const Menu = () => {
               marginBottom: 24,
             }}
           >
-
             <button
-              onClick={() =>
-                setCategoriaSeleccionada("todas")
-              }
+              onClick={() => setCategoriaSeleccionada("todas")}
               style={{
                 padding: "7px 16px",
                 borderRadius: 20,
                 border: "none",
                 background:
-                  categoriaSeleccionada === "todas"
-                    ? "#ff6a00"
-                    : "white",
+                  categoriaSeleccionada === "todas" ? "#ff6a00" : "white",
                 color:
-                  categoriaSeleccionada === "todas"
-                    ? "white"
-                    : "#374151",
+                  categoriaSeleccionada === "todas" ? "white" : "#374151",
                 fontWeight: 600,
               }}
             >
@@ -223,22 +198,18 @@ const Menu = () => {
               <button
                 key={cat.id_categoria}
                 onClick={() =>
-                  setCategoriaSeleccionada(
-                    String(cat.id_categoria)
-                  )
+                  setCategoriaSeleccionada(String(cat.id_categoria))
                 }
                 style={{
                   padding: "7px 16px",
                   borderRadius: 20,
                   border: "none",
                   background:
-                    categoriaSeleccionada ===
-                    String(cat.id_categoria)
+                    categoriaSeleccionada === String(cat.id_categoria)
                       ? "#ff6a00"
                       : "white",
                   color:
-                    categoriaSeleccionada ===
-                    String(cat.id_categoria)
+                    categoriaSeleccionada === String(cat.id_categoria)
                       ? "white"
                       : "#374151",
                   fontWeight: 600,
@@ -258,47 +229,43 @@ const Menu = () => {
         )}
 
         {/* VACÍO */}
-        {!cargando &&
-          platillosFiltrados.length === 0 && (
-            <Alert variant="info">
-              No hay platillos disponibles
-            </Alert>
-          )}
+        {!cargando && platillosFiltrados.length === 0 && (
+          <Alert variant="info">No hay platillos disponibles</Alert>
+        )}
 
         {/* PLATILLOS */}
-        {!cargando &&
-          platillosFiltrados.length > 0 && (
-            <Row className="g-3">
-
-              {platillosFiltrados.map((platillo) => (
-
-                <Col
-                  xs={6}
-                  sm={6}
-                  md={4}
-                  lg={3}
-                  key={platillo.id_platillo}
-                >
-
-                  <TarjetaMenu
-                    platillo={platillo}
-                    categoriaNombre={obtenerNombreCategoria(
-                      platillo.categoria_platillo
-                    )}
-                    extras={extras}
-                    onAgregar={(item) => {
-
-                      agregarAlCarrito({
-                        ...item,
-                        id_mesa: parseInt(idMesa),
-                      });
-                    }}
-                    esInvitado={false}
-                  />
-                </Col>
-              ))}
-            </Row>
-          )}
+        {!cargando && platillosFiltrados.length > 0 && (
+          <Row className="g-3">
+            {platillosFiltrados.map((platillo) => (
+              <Col
+                xs={6}
+                sm={6}
+                md={4}
+                lg={3}
+                key={platillo.id_platillo}
+                className="d-flex"
+                style={{
+                  minWidth: 0,
+                }}
+              >
+                <TarjetaMenu
+                  platillo={platillo}
+                  categoriaNombre={obtenerNombreCategoria(
+                    platillo.categoria_platillo
+                  )}
+                  extras={extras}
+                  onAgregar={(item) => {
+                    agregarAlCarrito({
+                      ...item,
+                      id_mesa: parseInt(idMesa),
+                    });
+                  }}
+                  esInvitado={false}
+                />
+              </Col>
+            ))}
+          </Row>
+        )}
       </div>
     </div>
   );
