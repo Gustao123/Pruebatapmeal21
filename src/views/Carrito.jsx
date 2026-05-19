@@ -41,51 +41,54 @@ const Carrito = () => {
   };
 
   const procederPago = async () => {
+    if (carrito.length === 0) return;
+    setError(null);
+    setProcesando(true);
 
-  if (carrito.length === 0) return;
+    try {
+      const mesaId = carrito[0]?.id_mesa || null;
+      const modoPOS = localStorage.getItem("modoPOS");
 
-  setError(null);
-  setProcesando(true);
+      // Obtener el id_cliente correcto según el contexto
+      let idCliente = null;
 
-  try {
+      if (modoPOS === "admin") {
+        // Admin en modo POS: usa el cliente seleccionado en el menú
+        idCliente = localStorage.getItem("clientePOS") || null;
+        if (!idCliente) {
+          setError("Debes seleccionar un cliente antes de realizar el pedido.");
+          setProcesando(false);
+          return;
+        }
+      } else {
+        // Cliente autenticado: buscar su id_cliente por email
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: cliente } = await supabase
+            .from("Clientes")
+            .select("id_cliente")
+            .eq("email", user.email)
+            .single();
+          idCliente = cliente?.id_cliente || null;
+        }
+        if (!idCliente) {
+          setError("No se pudo identificar al cliente. Inicia sesión nuevamente.");
+          setProcesando(false);
+          return;
+        }
+      }
 
-    const mesaId = carrito[0]?.id_mesa || null;
+      // Obtener tipo de pedido
+      const { data: tipoPedidoData } = await supabase
+        .from("Tipo_pedido")
+        .select("id_tipo")
+        .ilike("descripcion", `%${tipoPago}%`)
+        .limit(1);
 
-    const { data: sessionData } =
-      await supabase.auth.getSession();
+      const idTipo = tipoPedidoData?.[0]?.id_tipo || null;
 
-    const session = sessionData?.session;
-
-    if (!session) {
-
-      setError(
-        "Debes iniciar sesión para realizar un pedido."
-      );
-
-      setProcesando(false);
-      return;
-    }
-
-    const { data: clienteData } = await supabase
-      .from("Clientes")
-      .select("id_cliente")
-      .order("id_cliente", { ascending: false })
-      .limit(1);
-
-    const idCliente =
-      clienteData?.[0]?.id_cliente || null;
-
-    const { data: tipoPedidoData } = await supabase
-      .from("Tipo_pedido")
-      .select("id_tipo")
-      .ilike("descripcion", `%${tipoPago}%`)
-      .limit(1);
-
-    const idTipo =
-      tipoPedidoData?.[0]?.id_tipo || null;
-
-    const { data: pedidoData, error: errorPedido } =
-      await supabase
+      // Insertar pedido
+      const { data: pedidoData, error: errorPedido } = await supabase
         .from("Pedido")
         .insert([
           {
@@ -94,51 +97,48 @@ const Carrito = () => {
             id_tipo: idTipo,
             id_mesa: mesaId,
             estado: "Pendiente",
-            total: parseFloat(
-              totalCarrito.toFixed(2)
-            ),
+            total: parseFloat(totalCarrito.toFixed(2)),
           },
         ])
         .select();
 
-    if (errorPedido) throw errorPedido;
+      if (errorPedido) throw errorPedido;
 
-    const idPedido = pedidoData[0].id_pedido;
+      const idPedido = pedidoData[0].id_pedido;
 
-    const detalles = carrito.map((item) => ({
-      id_pedido: idPedido,
-      id_platillo: item.id_platillo,
-      cantidad: item.cantidad,
-      precio_unitario: parseFloat(item.precio || 0),
-      id_extra:
-        item.extraSeleccionado?.id_extra || null,
-      id_salsa:
-        item.salsaSeleccionada?.id_salsa || null,
-    }));
+      // Marcar mesa como ocupada
+      if (mesaId) {
+        await supabase
+          .from("Mesas")
+          .update({ estado: "Ocupada" })
+          .eq("id_mesa", mesaId);
+      }
 
-    const { error: errorDetalle } = await supabase
-      .from("Detalle_pedido")
-      .insert(detalles);
+      // Insertar detalles
+      const detalles = carrito.map((item) => ({
+        id_pedido: idPedido,
+        id_platillo: item.id_platillo,
+        cantidad: item.cantidad,
+        precio_unitario: parseFloat(item.precio || 0),
+        id_extra: item.extraSeleccionado?.id_extra || null,
+        id_salsa: item.salsaSeleccionada?.id_salsa || null,
+      }));
 
-    if (errorDetalle) throw errorDetalle;
+      const { error: errorDetalle } = await supabase
+        .from("Detalle_pedido")
+        .insert(detalles);
 
-    limpiarCarrito();
+      if (errorDetalle) throw errorDetalle;
 
-navegar(`/mi-pedido/${idPedido}`);
-
-  } catch (err) {
-
-    console.error(err);
-
-    setError(
-      "Ocurrió un error al registrar el pedido."
-    );
-
-  } finally {
-
-    setProcesando(false);
-  }
-};
+      limpiarCarrito();
+      navegar(`/mi-pedido/${idPedido}`);
+    } catch (err) {
+      console.error(err);
+      setError("Ocurrió un error al registrar el pedido.");
+    } finally {
+      setProcesando(false);
+    }
+  };
 
   const estiloChipPill = (seleccionado, color) => ({
     padding: "5px 12px", borderRadius: 20, fontSize: "0.78rem",
@@ -154,7 +154,6 @@ navegar(`/mi-pedido/${idPedido}`);
       fontFamily: "'Segoe UI', sans-serif", padding: "32px 20px",
     }}>
       <div style={{ maxWidth: 700, margin: "0 auto" }}>
-
         <h2 style={{ fontWeight: 800, color: "#0c0c2c", marginBottom: 6 }}>
           <i className="bi bi-cart3 me-2" style={{ color: "#ff6a00" }} />
           Tu Carrito
@@ -169,7 +168,6 @@ navegar(`/mi-pedido/${idPedido}`);
           </Alert>
         )}
 
-        {/* Vacío */}
         {carrito.length === 0 ? (
           <div style={{
             background: "white", borderRadius: 16, padding: "60px 24px",
@@ -190,7 +188,7 @@ navegar(`/mi-pedido/${idPedido}`);
           </div>
         ) : (
           <>
-            {/* Lista items */}
+            {/* Lista items (sin cambios) */}
             <div style={{
               background: "white", borderRadius: 16,
               boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 20, overflow: "hidden",
@@ -204,7 +202,6 @@ navegar(`/mi-pedido/${idPedido}`);
                 return (
                   <div key={i} style={{ borderBottom: i < carrito.length - 1 ? "1px solid #f3f4f6" : "none" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 20px" }}>
-
                       {/* Imagen */}
                       <div style={{
                         width: 60, height: 60, borderRadius: 10,
@@ -291,11 +288,9 @@ navegar(`/mi-pedido/${idPedido}`);
                       </button>
                     </div>
 
-                    {/* Panel expandible extras/salsas */}
+                    {/* Panel expandible extras/salsas (sin cambios) */}
                     {expandido && (
                       <div style={{ padding: "0 20px 16px", background: "#fafafa" }}>
-
-                        {/* Extras */}
                         {aceptaExtras && todosExtras.length > 0 && (
                           <div style={{ marginBottom: 12 }}>
                             <p style={{ fontWeight: 700, fontSize: "0.82rem", color: "#374151", marginBottom: 6 }}>
@@ -303,18 +298,11 @@ navegar(`/mi-pedido/${idPedido}`);
                               Extras
                             </p>
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                              <div
-                                onClick={() => actualizarExtra(i, null)}
-                                style={estiloChipPill(!item.extraSeleccionado, "#ff6a00")}
-                              >
-                                Ninguno
-                              </div>
+                              <div onClick={() => actualizarExtra(i, null)} style={estiloChipPill(!item.extraSeleccionado, "#ff6a00")}>Ninguno</div>
                               {todosExtras.map(extra => (
                                 <div
                                   key={extra.id_extra}
-                                  onClick={() => actualizarExtra(i,
-                                    item.extraSeleccionado?.id_extra === extra.id_extra ? null : extra
-                                  )}
+                                  onClick={() => actualizarExtra(i, item.extraSeleccionado?.id_extra === extra.id_extra ? null : extra)}
                                   style={estiloChipPill(item.extraSeleccionado?.id_extra === extra.id_extra, "#ff6a00")}
                                 >
                                   {extra.descripcion} (+C${parseFloat(extra.precio || 0).toFixed(2)})
@@ -323,8 +311,6 @@ navegar(`/mi-pedido/${idPedido}`);
                             </div>
                           </div>
                         )}
-
-                        {/* Salsas */}
                         {aceptaSalsas && todasSalsas.length > 0 && (
                           <div>
                             <p style={{ fontWeight: 700, fontSize: "0.82rem", color: "#374151", marginBottom: 6 }}>
@@ -332,18 +318,11 @@ navegar(`/mi-pedido/${idPedido}`);
                               Salsas
                             </p>
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                              <div
-                                onClick={() => actualizarSalsa(i, null)}
-                                style={estiloChipPill(!item.salsaSeleccionada, "#ef4444")}
-                              >
-                                Ninguna
-                              </div>
+                              <div onClick={() => actualizarSalsa(i, null)} style={estiloChipPill(!item.salsaSeleccionada, "#ef4444")}>Ninguna</div>
                               {todasSalsas.map(salsa => (
                                 <div
                                   key={salsa.id_salsa}
-                                  onClick={() => actualizarSalsa(i,
-                                    item.salsaSeleccionada?.id_salsa === salsa.id_salsa ? null : salsa
-                                  )}
+                                  onClick={() => actualizarSalsa(i, item.salsaSeleccionada?.id_salsa === salsa.id_salsa ? null : salsa)}
                                   style={estiloChipPill(item.salsaSeleccionada?.id_salsa === salsa.id_salsa, "#ef4444")}
                                 >
                                   {salsa.descripcion} (+C${parseFloat(salsa.precio || 0).toFixed(2)})
@@ -359,50 +338,31 @@ navegar(`/mi-pedido/${idPedido}`);
               })}
             </div>
 
-            {/* Tipo de pago */}
-            <div style={{
-              background: "white", borderRadius: 16, padding: "20px 24px",
-              boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 20,
-            }}>
+            {/* Tipo de pago (sin cambios) */}
+            <div style={{ background: "white", borderRadius: 16, padding: "20px 24px", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 20 }}>
               <h5 style={{ fontWeight: 700, color: "#0c0c2c", marginBottom: 16 }}>
-                <i className="bi bi-credit-card me-2" style={{ color: "#ff6a00" }} />
-                Tipo de pago
+                <i className="bi bi-credit-card me-2" style={{ color: "#ff6a00" }} /> Tipo de pago
               </h5>
               <div style={{ display: "flex", gap: 12 }}>
                 {["Efectivo", "Tarjeta"].map(tipo => (
-                  <div
-                    key={tipo}
-                    onClick={() => setTipoPago(tipo)}
-                    style={{
-                      flex: 1, padding: "14px 16px", borderRadius: 12, cursor: "pointer",
-                      border: `2px solid ${tipoPago === tipo ? "#ff6a00" : "#e5e7eb"}`,
-                      background: tipoPago === tipo ? "rgba(255,106,0,0.05)" : "white",
-                      textAlign: "center", transition: "all 0.2s",
-                    }}
-                  >
-                    <i
-                      className={`bi ${tipo === "Efectivo" ? "bi-cash" : "bi-credit-card"}`}
-                      style={{
-                        fontSize: "1.5rem", display: "block", marginBottom: 6,
-                        color: tipoPago === tipo ? "#ff6a00" : "#9ca3af",
-                      }}
-                    />
-                    <span style={{ fontWeight: 700, fontSize: "0.9rem", color: tipoPago === tipo ? "#ff6a00" : "#374151" }}>
-                      {tipo}
-                    </span>
+                  <div key={tipo} onClick={() => setTipoPago(tipo)} style={{
+                    flex: 1, padding: "14px 16px", borderRadius: 12, cursor: "pointer",
+                    border: `2px solid ${tipoPago === tipo ? "#ff6a00" : "#e5e7eb"}`,
+                    background: tipoPago === tipo ? "rgba(255,106,0,0.05)" : "white",
+                    textAlign: "center", transition: "all 0.2s",
+                  }}>
+                    <i className={`bi ${tipo === "Efectivo" ? "bi-cash" : "bi-credit-card"}`}
+                      style={{ fontSize: "1.5rem", display: "block", marginBottom: 6, color: tipoPago === tipo ? "#ff6a00" : "#9ca3af" }} />
+                    <span style={{ fontWeight: 700, fontSize: "0.9rem", color: tipoPago === tipo ? "#ff6a00" : "#374151" }}>{tipo}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Resumen */}
-            <div style={{
-              background: "white", borderRadius: 16, padding: "20px 24px",
-              boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 20,
-            }}>
+            {/* Resumen (sin cambios) */}
+            <div style={{ background: "white", borderRadius: 16, padding: "20px 24px", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 20 }}>
               <h5 style={{ fontWeight: 700, color: "#0c0c2c", marginBottom: 14 }}>
-                <i className="bi bi-receipt me-2" style={{ color: "#ff6a00" }} />
-                Resumen
+                <i className="bi bi-receipt me-2" style={{ color: "#ff6a00" }} /> Resumen
               </h5>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                 <span style={{ color: "#6b7280", fontSize: "0.9rem" }}>Subtotal</span>
@@ -415,9 +375,7 @@ navegar(`/mi-pedido/${idPedido}`);
               <hr style={{ margin: "14px 0" }} />
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ fontWeight: 800, fontSize: "1rem" }}>Total</span>
-                <span style={{ fontWeight: 800, fontSize: "1.2rem", color: "#ff6a00" }}>
-                  C${totalCarrito.toFixed(2)}
-                </span>
+                <span style={{ fontWeight: 800, fontSize: "1.2rem", color: "#ff6a00" }}>C${totalCarrito.toFixed(2)}</span>
               </div>
             </div>
 

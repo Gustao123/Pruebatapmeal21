@@ -191,26 +191,56 @@ const Pedidos = () => {
   };
 
   const actualizarPedido = async () => {
-    try {
+
+  try {
+
+    await supabase
+      .from("Pedido")
+      .update({
+        id_cliente: parseInt(pedidoEditar.id_cliente),
+        id_tipo: parseInt(pedidoEditar.id_tipo),
+        id_mesa: parseInt(pedidoEditar.id_mesa),
+        estado: pedidoEditar.estado,
+        total: parseFloat(pedidoEditar.total)
+      })
+      .eq("id_pedido", pedidoEditar.id_pedido);
+
+    // LIBERAR MESA
+    if (
+      pedidoEditar.estado === "Completado" ||
+      pedidoEditar.estado === "Cancelado"
+    ) {
+
       await supabase
-        .from("Pedido")
+        .from("Mesas")
         .update({
-          id_cliente: parseInt(pedidoEditar.id_cliente),
-          id_tipo: parseInt(pedidoEditar.id_tipo),
-          id_mesa: parseInt(pedidoEditar.id_mesa),
-          estado: pedidoEditar.estado,
-          total: parseFloat(pedidoEditar.total)
+          estado: "Disponible"
         })
-        .eq("id_pedido", pedidoEditar.id_pedido);
-
-      setToast({ mostrar: true, mensaje: "Pedido actualizado.", tipo: "exito" });
-      await cargarPedidos();
-      setMostrarModalEdicion(false);
-
-    } catch {
-      setToast({ mostrar: true, mensaje: "Error al actualizar pedido.", tipo: "error" });
+        .eq(
+          "id_mesa",
+          pedidoEditar.id_mesa
+        );
     }
-  };
+
+    setToast({
+      mostrar: true,
+      mensaje: "Pedido actualizado.",
+      tipo: "exito"
+    });
+
+    await cargarPedidos();
+
+    setMostrarModalEdicion(false);
+
+  } catch {
+
+    setToast({
+      mostrar: true,
+      mensaje: "Error al actualizar pedido.",
+      tipo: "error"
+    });
+  }
+};
 
   const eliminarPedido = async () => {
     if (!pedidoAEliminar) return;
