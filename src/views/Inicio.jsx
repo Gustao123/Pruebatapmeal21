@@ -53,7 +53,7 @@ export default function Inicio() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // SCANNER QR
+  // SCANNER QR (CORREGIDO)
   useEffect(() => {
     if (!mostrarScanner) return;
 
@@ -69,13 +69,21 @@ export default function Inicio() {
     scanner.render(
       (decodedText) => {
         console.log("QR detectado:", decodedText);
-
         scanner.clear();
 
-        // Ejemplo QR: mesa=5
-        const mesa = decodedText.split("=")[1];
+        // Extraer el número de mesa del texto escaneado
+        let mesa = decodedText.trim();
 
-        navegar(`/menu/${mesa}`);
+        // Si el texto tiene formato "mesa=5", tomar solo el número
+        if (mesa.includes("=")) {
+          mesa = mesa.split("=")[1]?.trim();
+        }
+
+        if (mesa) {
+          navegar(`/menu/${mesa}`);
+        } else {
+          alert("El QR no contiene un número de mesa válido.");
+        }
       },
       (error) => {
         console.log(error);
