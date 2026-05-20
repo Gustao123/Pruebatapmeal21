@@ -31,29 +31,41 @@ const RegistroCliente = () => {
   const registrar = async () => {
     setError(null);
 
+    // Validaciones
     if (!form.nombre.trim() || !form.apellido.trim() || !form.correo.trim() || !form.contrasena.trim()) {
       setError("Por favor completa todos los campos obligatorios.");
       return;
     }
-
     if (form.contrasena !== form.confirmarContrasena) {
       setError("Las contraseñas no coinciden.");
       return;
     }
-
     if (form.contrasena.length < 6) {
       setError("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+    const emailRegex = /^[^\s@]+@gmail\.com$/i;
+    if (!emailRegex.test(form.correo.trim())) {
+      setError("Solo se permiten correos @gmail.com");
       return;
     }
 
     try {
       setCargando(true);
+      const emailLower = form.correo.trim().toLowerCase();
 
-      const { data, error: errorAuth } = await supabase.auth.signUp({
-        email: form.correo.trim(),
+      // Crear usuario en Auth con todos los datos en user_metadata
+      const { error: errorAuth } = await supabase.auth.signUp({
+        email: emailLower,
         password: form.contrasena,
         options: {
-          data: { rol: "cliente" },
+          data: {
+            rol: "cliente",
+            nombre: form.nombre.trim(),
+            apellido: form.apellido.trim(),
+            telefono: form.telefono.trim() || null,
+            direccion: form.direccion.trim() || null,
+          },
         },
       });
 
@@ -66,25 +78,16 @@ const RegistroCliente = () => {
         return;
       }
 
-      // Insertar en tabla Clientes
-      const { error: errorCliente } = await supabase.from("Clientes").insert([{
-        nombre_cliente: form.nombre.trim(),
-        apellido_cliente: form.apellido.trim(),
-        telefono: form.telefono.trim() || null,
-        direccion: form.direccion.trim() || null,
-      }]);
+      // (Opcional) Si quieres mantener la tabla Clientes, puedes insertar aquí usando el nuevo UUID.
+      // Pero ya no es necesario para el funcionamiento básico.
 
-      if (errorCliente) {
-        console.error("Error al guardar en tabla Clientes:", errorCliente.message);
-      }
-
-      localStorage.setItem("usuario-supabase", form.correo.trim());
-      // Redirigir al menú con la mesa si existe
+      // Redirigir
+      localStorage.setItem("usuario-supabase", emailLower);
       navigate(mesaId ? `/menu/${mesaId}` : "/menu");
 
     } catch (err) {
-      setError("Error inesperado. Intenta de nuevo.");
       console.error(err);
+      setError("Error inesperado. Intenta de nuevo.");
     } finally {
       setCargando(false);
     }
