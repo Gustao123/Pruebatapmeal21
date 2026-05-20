@@ -25,7 +25,7 @@ const Menu = () => {
   const { idMesa } = useParams();
   const [nombreMesa, setNombreMesa] = useState("");
 
-  // Guardar mesa y cargar nombre
+  // Cargar nombre de la mesa si existe
   useEffect(() => {
     if (idMesa) {
       localStorage.setItem("idMesa", idMesa);
@@ -49,7 +49,7 @@ const Menu = () => {
     }
   }, [idMesa]);
 
-  // Verificar sesión y obtener nombre del cliente desde user_metadata
+  // Verificar sesión y obtener datos del cliente
   useEffect(() => {
     const verificarSesion = async () => {
       try {
@@ -70,6 +70,10 @@ const Menu = () => {
         else if (user && rol === "cliente") {
           setSesionActiva(true);
           setEsAdmin(false);
+          // Limpiar cualquier residuo de modo POS
+          localStorage.removeItem("modoPOS");
+          localStorage.removeItem("clientePOS");
+          
           // Obtener nombre desde user_metadata
           const metadata = user.user_metadata;
           const nombre = metadata?.nombre || "";
@@ -107,7 +111,7 @@ const Menu = () => {
         setCategorias(resCategorias.data || []);
         setExtras(resExtras.data || []);
       } catch (err) {
-        setErrorCarga("Error al cargar menú");
+        setErrorCarga("Error al cargar el menú");
       } finally {
         setCargando(false);
       }
@@ -172,11 +176,10 @@ const Menu = () => {
           </div>
         )}
 
-        {/* Buscador y filtros (igual que antes) */}
         <div style={{ marginBottom: 20, maxWidth: 400 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: "white", borderRadius: 10, padding: "8px 14px", border: "1px solid #e5e7eb" }}>
             <i className="bi bi-search" />
-            <input type="text" placeholder="Buscar..." value={textoBusqueda} onChange={e => setTextoBusqueda(e.target.value)} style={{ border: "none", outline: "none", flex: 1 }} />
+            <input type="text" placeholder="Buscar platillos..." value={textoBusqueda} onChange={e => setTextoBusqueda(e.target.value)} style={{ border: "none", outline: "none", flex: 1 }} />
           </div>
         </div>
 

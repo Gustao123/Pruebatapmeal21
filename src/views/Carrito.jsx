@@ -48,22 +48,27 @@ const Carrito = () => {
 
     try {
       const mesaId = carrito[0]?.id_mesa || null;
-      const modoPOS = localStorage.getItem("modoPOS");
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw new Error("No se pudo obtener el usuario.");
 
+      const rol = user?.user_metadata?.rol;
       let authUserId = null;
-      let idCliente = null; // Para modo POS seguimos usando tabla Clientes (opcional)
+      let idCliente = null;
 
-      if (modoPOS === "admin") {
-        idCliente = localStorage.getItem("clientePOS") || null;
-        if (!idCliente) throw new Error("Debes seleccionar un cliente.");
-      } else {
-        // Cliente normal autenticado: usar auth_user_id
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        if (userError || !user) throw new Error("No estás autenticado.");
+      if (rol === "cliente") {
+        // Cliente normal autenticado
         authUserId = user.id;
+      } 
+      else if (rol === "admin" && localStorage.getItem("modoPOS") === "admin") {
+        // Administrador en modo POS
+        idCliente = localStorage.getItem("clientePOS");
+        if (!idCliente) throw new Error("Debes seleccionar un cliente.");
+      } 
+      else {
+        throw new Error("No tienes permisos para realizar un pedido.");
       }
 
-      // Obtener id_tipo
+      // Obtener tipo de pago
       const { data: tipoPedidoData } = await supabase
         .from("Tipo_pedido")
         .select("id_tipo")
@@ -71,7 +76,7 @@ const Carrito = () => {
         .limit(1);
       const idTipo = tipoPedidoData?.[0]?.id_tipo || null;
 
-      // Insertar pedido usando auth_user_id (para clientes normales) o id_cliente (para modo POS)
+      // Insertar pedido
       const pedidoInsert = {
         fecha: new Date().toISOString(),
         id_tipo: idTipo,
@@ -79,22 +84,21 @@ const Carrito = () => {
         estado: "Pendiente",
         total: parseFloat(totalCarrito.toFixed(2)),
       };
-      if (modoPOS === "admin") {
-        pedidoInsert.id_cliente = parseInt(idCliente);
-      } else {
+      if (authUserId) {
         pedidoInsert.auth_user_id = authUserId;
+      } else if (idCliente) {
+        pedidoInsert.id_cliente = parseInt(idCliente);
       }
 
       const { data: pedidoData, error: errorPedido } = await supabase
         .from("Pedido")
         .insert([pedidoInsert])
         .select();
-
       if (errorPedido) throw errorPedido;
 
       const idPedido = pedidoData[0].id_pedido;
 
-      // Marcar mesa ocupada solo si hay mesa
+      // Marcar mesa ocupada si existe
       if (mesaId) {
         await supabase.from("Mesas").update({ estado: "Ocupada" }).eq("id_mesa", mesaId);
       }
@@ -122,7 +126,7 @@ const Carrito = () => {
     }
   };
 
-  // Renderizado (igual que antes, sin cambios)
+  // Estilos y renderizado (sin cambios significativos)
   const estiloChipPill = (seleccionado, color) => ({
     padding: "5px 12px", borderRadius: 20, fontSize: "0.78rem",
     cursor: "pointer", fontWeight: 600, transition: "all 0.15s",
@@ -144,7 +148,7 @@ const Carrito = () => {
           </div>
         ) : (
           <>
-            {/* Lista de items (igual) */}
+            {/* Lista de productos */}
             <div style={{ background: "white", borderRadius: 16, marginBottom: 20 }}>
               {carrito.map((item, i) => {
                 const categoriaLower = (item.categoriaNombre || "").toLowerCase();
@@ -212,7 +216,7 @@ const Carrito = () => {
               })}
             </div>
 
-            {/* Tipo pago y resumen */}
+            {/* Tipo de pago */}
             <div style={{ background: "white", borderRadius: 16, padding: "20px 24px", marginBottom: 20 }}>
               <h5>Tipo de pago</h5>
               <div style={{ display: "flex", gap: 12 }}>
@@ -225,6 +229,7 @@ const Carrito = () => {
               </div>
             </div>
 
+            {/* Resumen */}
             <div style={{ background: "white", borderRadius: 16, padding: "20px 24px", marginBottom: 20 }}>
               <h5>Resumen</h5>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}><span>Subtotal</span><span>C${totalCarrito.toFixed(2)}</span></div>
