@@ -1,11 +1,14 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../database/supabaseconfig";
 import FormularioRegistro from "../components/registro/FormularioRegistro";
 import Logo from "../assets/Logo.png";
 
 const RegistroCliente = () => {
-  const navegar = useNavigate();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const mesaId = queryParams.get("mesa");
 
   const [form, setForm] = useState({
     nombre: "",
@@ -46,7 +49,6 @@ const RegistroCliente = () => {
     try {
       setCargando(true);
 
-      // 1. Crear usuario en Supabase Auth con rol "cliente"
       const { data, error: errorAuth } = await supabase.auth.signUp({
         email: form.correo.trim(),
         password: form.contrasena,
@@ -64,7 +66,7 @@ const RegistroCliente = () => {
         return;
       }
 
-      // 2. Insertar en tabla Clientes
+      // Insertar en tabla Clientes
       const { error: errorCliente } = await supabase.from("Clientes").insert([{
         nombre_cliente: form.nombre.trim(),
         apellido_cliente: form.apellido.trim(),
@@ -76,9 +78,9 @@ const RegistroCliente = () => {
         console.error("Error al guardar en tabla Clientes:", errorCliente.message);
       }
 
-      // 3. ✅ Redirigir a /menu (no a /menu-cliente)
       localStorage.setItem("usuario-supabase", form.correo.trim());
-      navegar("/menu");
+      // Redirigir al menú con la mesa si existe
+      navigate(mesaId ? `/menu/${mesaId}` : "/menu");
 
     } catch (err) {
       setError("Error inesperado. Intenta de nuevo.");
@@ -96,8 +98,6 @@ const RegistroCliente = () => {
       display: "flex",
       flexDirection: "column",
     }}>
-
-      {/* NAVBAR */}
       <nav style={{
         background: "white", padding: "0 28px", height: 58,
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -105,7 +105,7 @@ const RegistroCliente = () => {
       }}>
         <div
           style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
-          onClick={() => navegar("/")}
+          onClick={() => navigate("/")}
         >
           <img src={Logo} alt="TapMeal" style={{ height: 34, objectFit: "contain" }} />
           <span style={{ fontWeight: 800, fontSize: "1.3rem", color: "#0c0c2c" }}>TapMeal</span>
@@ -116,7 +116,6 @@ const RegistroCliente = () => {
         </div>
       </nav>
 
-      {/* FORMULARIO CENTRADO */}
       <div style={{
         flex: 1, display: "flex", alignItems: "center",
         justifyContent: "center", padding: "32px 24px",
@@ -127,7 +126,7 @@ const RegistroCliente = () => {
           cargando={cargando}
           manejarCambio={manejarCambio}
           registrar={registrar}
-          irALogin={() => navegar("/login")}
+          irALogin={() => navigate(mesaId ? `/login?mesa=${mesaId}` : "/login")}
         />
       </div>
     </div>

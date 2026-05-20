@@ -46,14 +46,12 @@ const Carrito = () => {
     setProcesando(true);
 
     try {
-      const mesaId = carrito[0]?.id_mesa || null;
+      const mesaId = carrito[0]?.id_mesa || null;  // null si es pedido en línea
       const modoPOS = localStorage.getItem("modoPOS");
 
-      // Obtener el id_cliente correcto según el contexto
       let idCliente = null;
 
       if (modoPOS === "admin") {
-        // Admin en modo POS: usa el cliente seleccionado en el menú
         idCliente = localStorage.getItem("clientePOS") || null;
         if (!idCliente) {
           setError("Debes seleccionar un cliente antes de realizar el pedido.");
@@ -61,7 +59,6 @@ const Carrito = () => {
           return;
         }
       } else {
-        // Cliente autenticado: buscar su id_cliente por email
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           const { data: cliente } = await supabase
@@ -78,7 +75,6 @@ const Carrito = () => {
         }
       }
 
-      // Obtener tipo de pedido
       const { data: tipoPedidoData } = await supabase
         .from("Tipo_pedido")
         .select("id_tipo")
@@ -95,7 +91,7 @@ const Carrito = () => {
             fecha: new Date().toISOString(),
             id_cliente: idCliente,
             id_tipo: idTipo,
-            id_mesa: mesaId,
+            id_mesa: mesaId,    // puede ser null
             estado: "Pendiente",
             total: parseFloat(totalCarrito.toFixed(2)),
           },
@@ -106,7 +102,7 @@ const Carrito = () => {
 
       const idPedido = pedidoData[0].id_pedido;
 
-      // Marcar mesa como ocupada
+      // Marcar mesa como ocupada SOLO si hay mesa
       if (mesaId) {
         await supabase
           .from("Mesas")
@@ -114,7 +110,6 @@ const Carrito = () => {
           .eq("id_mesa", mesaId);
       }
 
-      // Insertar detalles
       const detalles = carrito.map((item) => ({
         id_pedido: idPedido,
         id_platillo: item.id_platillo,
@@ -188,7 +183,6 @@ const Carrito = () => {
           </div>
         ) : (
           <>
-            {/* Lista items (sin cambios) */}
             <div style={{
               background: "white", borderRadius: 16,
               boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 20, overflow: "hidden",
@@ -202,11 +196,7 @@ const Carrito = () => {
                 return (
                   <div key={i} style={{ borderBottom: i < carrito.length - 1 ? "1px solid #f3f4f6" : "none" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 20px" }}>
-                      {/* Imagen */}
-                      <div style={{
-                        width: 60, height: 60, borderRadius: 10,
-                        overflow: "hidden", flexShrink: 0, background: "#f3f4f6",
-                      }}>
+                      <div style={{ width: 60, height: 60, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: "#f3f4f6" }}>
                         {item.url_imagen ? (
                           <img src={item.url_imagen} alt={item.nombre_platillo}
                             style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -217,7 +207,6 @@ const Carrito = () => {
                         )}
                       </div>
 
-                      {/* Info */}
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 700, fontSize: "0.92rem", color: "#0c0c2c" }}>
                           {item.nombre_platillo}
@@ -246,7 +235,6 @@ const Carrito = () => {
                         )}
                       </div>
 
-                      {/* Cantidad */}
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <button
                           onClick={() => disminuirCantidad(i)}
@@ -272,14 +260,12 @@ const Carrito = () => {
                         >+</button>
                       </div>
 
-                      {/* Subtotal */}
                       <div style={{ minWidth: 80, textAlign: "right" }}>
                         <div style={{ fontWeight: 800, color: "#ff6a00", fontSize: "0.92rem" }}>
                           C${calcularSubtotalItem(item).toFixed(2)}
                         </div>
                       </div>
 
-                      {/* Eliminar */}
                       <button
                         onClick={() => eliminarDelCarrito(i)}
                         style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "1.1rem" }}
@@ -288,7 +274,6 @@ const Carrito = () => {
                       </button>
                     </div>
 
-                    {/* Panel expandible extras/salsas (sin cambios) */}
                     {expandido && (
                       <div style={{ padding: "0 20px 16px", background: "#fafafa" }}>
                         {aceptaExtras && todosExtras.length > 0 && (
@@ -338,7 +323,6 @@ const Carrito = () => {
               })}
             </div>
 
-            {/* Tipo de pago (sin cambios) */}
             <div style={{ background: "white", borderRadius: 16, padding: "20px 24px", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 20 }}>
               <h5 style={{ fontWeight: 700, color: "#0c0c2c", marginBottom: 16 }}>
                 <i className="bi bi-credit-card me-2" style={{ color: "#ff6a00" }} /> Tipo de pago
@@ -359,7 +343,6 @@ const Carrito = () => {
               </div>
             </div>
 
-            {/* Resumen (sin cambios) */}
             <div style={{ background: "white", borderRadius: 16, padding: "20px 24px", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 20 }}>
               <h5 style={{ fontWeight: 700, color: "#0c0c2c", marginBottom: 14 }}>
                 <i className="bi bi-receipt me-2" style={{ color: "#ff6a00" }} /> Resumen
@@ -379,7 +362,6 @@ const Carrito = () => {
               </div>
             </div>
 
-            {/* Botón pago */}
             <button
               onClick={procederPago}
               disabled={procesando}

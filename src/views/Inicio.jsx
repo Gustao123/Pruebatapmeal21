@@ -2,7 +2,6 @@ import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Html5Qrcode } from "html5-qrcode";
 import { supabase } from "../database/supabaseconfig";
-import Logo from "../assets/Logo.png";
 
 const caracteristicas = [
   {
@@ -48,75 +47,61 @@ export default function Inicio() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // Iniciar escáner cuando se abre el modal
+  // Iniciar el escáner con la cámara trasera forzada
   useEffect(() => {
     if (!mostrarScanner) {
-      // Si se cierra el escáner, detenerlo si estaba activo
       if (scannerRef.current && scannerIniciado) {
-        scannerRef.current.stop().catch(err => console.warn("Error al detener escáner:", err));
+        scannerRef.current.stop().catch((err) => console.warn("Error al detener escáner:", err));
         setScannerIniciado(false);
         setCamaraActiva(false);
       }
       return;
     }
 
-    // Esperar a que el elemento reader esté en el DOM
     const iniciarScanner = async () => {
       const elementId = "qr-reader";
       const readerElement = document.getElementById(elementId);
-      if (!readerElement) {
-        console.error("Elemento reader no encontrado");
-        return;
-      }
+      if (!readerElement) return;
 
       try {
         const html5QrCode = new Html5Qrcode(elementId);
         scannerRef.current = html5QrCode;
 
-        // Configuración: cámara trasera por defecto, alta resolución
+        // Configuración del área de escaneo
         const config = { fps: 10, qrbox: { width: 250, height: 250 } };
 
-        // Obtener lista de cámaras para elegir la trasera
-        const cameras = await Html5Qrcode.getCameras();
-        let cameraId = null;
-        if (cameras && cameras.length) {
-          // Buscar cámara que contenga "back" o "environment"
-          cameraId = cameras.find(cam => cam.label.toLowerCase().includes("back") || cam.label.toLowerCase().includes("environment"))?.id;
-          if (!cameraId) cameraId = cameras[0].id; // primera disponible
-        }
-
+        // Forzar el uso de la cámara trasera en dispositivos móviles
+        // facingMode: "environment" = cámara trasera
         await html5QrCode.start(
-          cameraId ? { deviceId: { exact: cameraId } } : undefined,
+          { facingMode: "environment" }, // Solo cámara trasera
           config,
           (decodedText) => {
-            // Éxito al escanear
-            console.log("QR detectado:", decodedText);
-            html5QrCode.stop().catch(e => console.warn(e));
+            // QR leído correctamente
+            html5QrCode.stop().catch((e) => console.warn(e));
             setScannerIniciado(false);
             setCamaraActiva(false);
             setMostrarScanner(false);
 
-            // Procesar el texto escaneado
+            // Procesar el contenido del QR
             let mesa = decodedText.trim();
             if (mesa.includes("=")) {
               mesa = mesa.split("=")[1]?.trim();
             }
-            if (mesa) {
+            if (mesa && !isNaN(parseInt(mesa))) {
               navigate(`/menu/${mesa}`);
             } else {
               alert("El QR no contiene un número de mesa válido.");
             }
           },
           (errorMessage) => {
-            // Errores de escaneo (opcional, silenciar para no molestar)
-            // console.log(errorMessage);
+            // No mostrar errores de escaneo continuo (son normales)
           }
         );
         setScannerIniciado(true);
         setCamaraActiva(true);
       } catch (err) {
-        console.error("Error al iniciar la cámara:", err);
-        alert("No se pudo acceder a la cámara. Por favor, verifica los permisos.");
+        console.error("Error al iniciar la cámara trasera:", err);
+        alert("No se pudo acceder a la cámara trasera. Verifica los permisos.");
         setMostrarScanner(false);
       }
     };
@@ -125,14 +110,14 @@ export default function Inicio() {
 
     return () => {
       if (scannerRef.current && scannerIniciado) {
-        scannerRef.current.stop().catch(e => console.warn(e));
+        scannerRef.current.stop().catch((e) => console.warn(e));
       }
     };
   }, [mostrarScanner, navigate]);
 
   const cerrarScanner = () => {
     if (scannerRef.current && scannerIniciado) {
-      scannerRef.current.stop().catch(e => console.warn(e));
+      scannerRef.current.stop().catch((e) => console.warn(e));
     }
     setMostrarScanner(false);
     setScannerIniciado(false);
@@ -150,20 +135,6 @@ export default function Inicio() {
         .fade-up.show {
           opacity: 1;
           transform: translateY(0);
-        }
-        .btn-sesion {
-          background: #111;
-          color: white;
-          border: none;
-          padding: 9px 22px;
-          border-radius: 8px;
-          font-weight: 600;
-          font-size: 0.88rem;
-          cursor: pointer;
-          transition: background 0.2s;
-        }
-        .btn-sesion:hover {
-          background: #333;
         }
         .btn-outline-dark-custom {
           background: transparent;
@@ -274,6 +245,7 @@ export default function Inicio() {
           text-align: center;
           color: white;
           margin-top: 20px;
+          margin-bottom: 20px;
           font-size: 14px;
         }
       `}</style>
@@ -304,7 +276,7 @@ export default function Inicio() {
         </div>
       </div>
 
-      {/* TARJETAS */}
+      {/* TARJETAS DE CARACTERÍSTICAS */}
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 24px 64px", display: "flex", gap: 20, flexWrap: "wrap" }}>
         {caracteristicas.map((c, i) => (
           <div
@@ -321,7 +293,7 @@ export default function Inicio() {
         ))}
       </div>
 
-      {/* MODAL DEL ESCÁNER */}
+      {/* MODAL DEL ESCÁNER - SOLO CÁMARA TRASERA */}
       {mostrarScanner && (
         <div className="scanner-container">
           <div className="scanner-box">
@@ -332,7 +304,9 @@ export default function Inicio() {
             </div>
             <div id="qr-reader" style={{ width: "100%", margin: "0 auto" }}></div>
             <div className="scanner-message">
-              {camaraActiva ? "Apunta al código QR de la mesa" : "Solicitando acceso a la cámara..."}
+              {camaraActiva
+                ? "📷 Apunta al código QR de la mesa (cámara trasera)"
+                : "⏳ Solicitando acceso a la cámara trasera..."}
             </div>
           </div>
         </div>

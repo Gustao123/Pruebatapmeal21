@@ -6,7 +6,7 @@ import { supabase } from "../../database/supabaseconfig";
 const SIN_COMPLEMENTOS = ["frappés", "bebidas", "postres", "licores"];
 const CON_SALSAS = ["comidas", "alitas"];
 
-const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado }) => {
+const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado, mesaId }) => {
   const [mostrarModal, setMostrarModal] = useState(false);
   const [extraSeleccionado, setExtraSeleccionado] = useState(null);
   const [salsaSeleccionada, setSalsaSeleccionada] = useState(null);
@@ -24,19 +24,14 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
           .from("Salsas")
           .select("*")
           .order("descripcion");
-
         if (data) setSalsas(data);
       };
-
       cargarSalsas();
     }
   }, [mostrarModal, aceptaSalsas, salsas.length]);
 
   const descripcion = platillo.descripcion || "";
-  const preview =
-    descripcion.length > 60
-      ? descripcion.substring(0, 60) + "..."
-      : descripcion;
+  const preview = descripcion.length > 60 ? descripcion.substring(0, 60) + "..." : descripcion;
 
   const cerrarModal = () => {
     setMostrarModal(false);
@@ -46,26 +41,29 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
 
   const handleAgregar = () => {
     if (esInvitado) {
-      navegar("/registro");
+      // Redirige al registro conservando la mesa si existe
+      const url = mesaId ? `/registro?mesa=${mesaId}` : "/registro";
+      navegar(url);
       return;
     }
 
-    onAgregar({
+    const item = {
       ...platillo,
       extraSeleccionado,
       salsaSeleccionada,
       categoriaNombre,
-    });
-
+    };
+    if (mesaId) {
+      item.id_mesa = mesaId;
+    }
+    onAgregar(item);
     cerrarModal();
   };
 
   const precioTotal = () => {
     let total = parseFloat(platillo.precio || 0);
-
     if (extraSeleccionado) total += parseFloat(extraSeleccionado.precio || 0);
     if (salsaSeleccionada) total += parseFloat(salsaSeleccionada.precio || 0);
-
     return total;
   };
 
@@ -125,9 +123,7 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
 
         <Card.Body
           className="p-3 d-flex flex-column"
-          style={{
-            minWidth: 0,
-          }}
+          style={{ minWidth: 0 }}
         >
           <Badge
             bg="warning"
@@ -222,6 +218,7 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
         </Card.Body>
       </Card>
 
+      {/* Modal con detalles igual que antes, solo handleAgregar ya modificado */}
       <Modal show={mostrarModal} onHide={cerrarModal} size="lg" centered>
         <Modal.Header closeButton className="border-0 pb-0">
           <Modal.Title className="fw-bold" style={{ color: "#0c0c2c" }}>
@@ -237,11 +234,7 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
                   src={platillo.url_imagen}
                   alt={platillo.nombre_platillo}
                   className="img-fluid rounded"
-                  style={{
-                    maxHeight: 280,
-                    objectFit: "cover",
-                    width: "100%",
-                  }}
+                  style={{ maxHeight: 280, objectFit: "cover", width: "100%" }}
                 />
               ) : (
                 <div
@@ -274,7 +267,6 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
                     <i className="bi bi-plus-circle me-1" style={{ color: "#ff6a00" }} />
                     Extras (opcional)
                   </p>
-
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {extras.map((extra) => (
                       <div
@@ -284,10 +276,7 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
                             extraSeleccionado?.id_extra === extra.id_extra ? null : extra
                           )
                         }
-                        style={estiloChip(
-                          extraSeleccionado?.id_extra === extra.id_extra,
-                          "#ff6a00"
-                        )}
+                        style={estiloChip(extraSeleccionado?.id_extra === extra.id_extra, "#ff6a00")}
                       >
                         {extra.descripcion}{" "}
                         <span style={{ opacity: 0.7 }}>
@@ -305,7 +294,6 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
                     <i className="bi bi-droplet me-1" style={{ color: "#ef4444" }} />
                     Salsa (opcional)
                   </p>
-
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {salsas.map((salsa) => (
                       <div
@@ -315,10 +303,7 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
                             salsaSeleccionada?.id_salsa === salsa.id_salsa ? null : salsa
                           )
                         }
-                        style={estiloChip(
-                          salsaSeleccionada?.id_salsa === salsa.id_salsa,
-                          "#ef4444"
-                        )}
+                        style={estiloChip(salsaSeleccionada?.id_salsa === salsa.id_salsa, "#ef4444")}
                       >
                         {salsa.descripcion}{" "}
                         <span style={{ opacity: 0.7 }}>
@@ -339,7 +324,6 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
                   }}
                 >
                   <small className="text-muted">Total con selección:</small>
-
                   <div className="fw-bold" style={{ color: "#ff6a00", fontSize: "1.1rem" }}>
                     C${precioTotal().toFixed(2)}
                   </div>
@@ -358,9 +342,11 @@ const TarjetaMenu = ({ platillo, categoriaNombre, extras, onAgregar, esInvitado 
                     <i className="bi bi-lock-fill me-2" />
                     Para agregar al carrito necesitas una cuenta.
                   </p>
-
                   <button
-                    onClick={() => navegar("/registro")}
+                    onClick={() => {
+                      const url = mesaId ? `/registro?mesa=${mesaId}` : "/registro";
+                      navegar(url);
+                    }}
                     style={{
                       marginTop: 10,
                       background: "#ff6a00",

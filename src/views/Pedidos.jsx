@@ -191,54 +191,34 @@ const Pedidos = () => {
   };
 
   const actualizarPedido = async () => {
-
   try {
-
     await supabase
       .from("Pedido")
       .update({
         id_cliente: parseInt(pedidoEditar.id_cliente),
         id_tipo: parseInt(pedidoEditar.id_tipo),
-        id_mesa: parseInt(pedidoEditar.id_mesa),
+        id_mesa: pedidoEditar.id_mesa ? parseInt(pedidoEditar.id_mesa) : null,
         estado: pedidoEditar.estado,
         total: parseFloat(pedidoEditar.total)
       })
       .eq("id_pedido", pedidoEditar.id_pedido);
 
-    // LIBERAR MESA
+    // Liberar mesa solo si el pedido tiene mesa y se marca como completado/cancelado
     if (
-      pedidoEditar.estado === "Completado" ||
-      pedidoEditar.estado === "Cancelado"
+      (pedidoEditar.estado === "Completado" || pedidoEditar.estado === "Cancelado") &&
+      pedidoEditar.id_mesa
     ) {
-
       await supabase
         .from("Mesas")
-        .update({
-          estado: "Disponible"
-        })
-        .eq(
-          "id_mesa",
-          pedidoEditar.id_mesa
-        );
+        .update({ estado: "Disponible" })
+        .eq("id_mesa", pedidoEditar.id_mesa);
     }
 
-    setToast({
-      mostrar: true,
-      mensaje: "Pedido actualizado.",
-      tipo: "exito"
-    });
-
+    setToast({ mostrar: true, mensaje: "Pedido actualizado.", tipo: "exito" });
     await cargarPedidos();
-
     setMostrarModalEdicion(false);
-
   } catch {
-
-    setToast({
-      mostrar: true,
-      mensaje: "Error al actualizar pedido.",
-      tipo: "error"
-    });
+    setToast({ mostrar: true, mensaje: "Error al actualizar pedido.", tipo: "error" });
   }
 };
 
