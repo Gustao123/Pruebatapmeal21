@@ -47,7 +47,7 @@ export default function Inicio() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // Iniciar el escáner con la cámara trasera forzada
+  // Iniciar escáner con cámara trasera
   useEffect(() => {
     if (!mostrarScanner) {
       if (scannerRef.current && scannerIniciado) {
@@ -67,34 +67,32 @@ export default function Inicio() {
         const html5QrCode = new Html5Qrcode(elementId);
         scannerRef.current = html5QrCode;
 
-        // Configuración del área de escaneo
         const config = { fps: 10, qrbox: { width: 250, height: 250 } };
 
-        // Forzar el uso de la cámara trasera en dispositivos móviles
-        // facingMode: "environment" = cámara trasera
         await html5QrCode.start(
-          { facingMode: "environment" }, // Solo cámara trasera
+          { facingMode: "environment" }, // cámara trasera
           config,
           (decodedText) => {
-            // QR leído correctamente
-            html5QrCode.stop().catch((e) => console.warn(e));
-            setScannerIniciado(false);
-            setCamaraActiva(false);
-            setMostrarScanner(false);
-
-            // Procesar el contenido del QR
-            let mesa = decodedText.trim();
-            if (mesa.includes("=")) {
-              mesa = mesa.split("=")[1]?.trim();
+            // ✅ Extraer número de mesa del texto escaneado
+            let numeroMesa = null;
+            const match = decodedText.match(/\d+/); // busca el primer grupo de dígitos
+            if (match) {
+              numeroMesa = parseInt(match[0], 10);
             }
-            if (mesa && !isNaN(parseInt(mesa))) {
-              navigate(`/menu/${mesa}`);
+
+            if (numeroMesa && !isNaN(numeroMesa)) {
+              html5QrCode.stop().catch((e) => console.warn(e));
+              setScannerIniciado(false);
+              setCamaraActiva(false);
+              setMostrarScanner(false);
+              navigate(`/menu/${numeroMesa}`);
             } else {
-              alert("El QR no contiene un número de mesa válido.");
+              alert("El código QR no contiene un número de mesa válido.\n\nContenido escaneado: " + decodedText);
+              // Opcional: reiniciar escáner
             }
           },
           (errorMessage) => {
-            // No mostrar errores de escaneo continuo (son normales)
+            // No mostrar errores continuos
           }
         );
         setScannerIniciado(true);
@@ -293,7 +291,7 @@ export default function Inicio() {
         ))}
       </div>
 
-      {/* MODAL DEL ESCÁNER - SOLO CÁMARA TRASERA */}
+      {/* MODAL DEL ESCÁNER */}
       {mostrarScanner && (
         <div className="scanner-container">
           <div className="scanner-box">

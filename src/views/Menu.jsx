@@ -21,30 +21,41 @@ const Menu = () => {
   const [clienteSeleccionado, setClienteSeleccionado] = useState("");
   const { agregarAlCarrito } = useCarrito();
   const navigate = useNavigate();
-  const { idMesa } = useParams();  // puede venir de la ruta /menu/:idMesa
+  const { idMesa } = useParams(); // puede venir de la ruta /menu/:idMesa
   const [nombreMesa, setNombreMesa] = useState("");
 
-  // Guardar mesa en localStorage si existe
+  // Guardar mesa en localStorage y cargar su nombre
   useEffect(() => {
     if (idMesa) {
       localStorage.setItem("idMesa", idMesa);
-      // También cargar nombre de la mesa para mostrarlo
       const cargarNombreMesa = async () => {
-        const { data } = await supabase
-          .from("Mesas")
-          .select("nombre_mesa")
-          .eq("id_mesa", idMesa)
-          .single();
-        if (data) setNombreMesa(data.nombre_mesa);
+        try {
+          const { data, error } = await supabase
+            .from("Mesas")
+            .select("nombre_mesa")
+            .eq("id_mesa", idMesa)
+            .single();
+          if (error) throw error;
+          if (data) {
+            setNombreMesa(data.nombre_mesa);
+            localStorage.setItem("nombreMesa", data.nombre_mesa);
+          } else {
+            setNombreMesa(`Mesa ${idMesa}`);
+          }
+        } catch (err) {
+          console.error("Error al cargar nombre de la mesa:", err);
+          setNombreMesa(`Mesa ${idMesa}`);
+        }
       };
       cargarNombreMesa();
     } else {
       localStorage.removeItem("idMesa");
+      localStorage.removeItem("nombreMesa");
       setNombreMesa("");
     }
   }, [idMesa]);
 
-  // Verificar sesión (igual que antes)
+  // Verificar sesión
   useEffect(() => {
     const verificarSesion = async () => {
       try {
@@ -118,7 +129,7 @@ const Menu = () => {
       const lower = textoBusqueda.toLowerCase();
       filtrados = filtrados.filter(p =>
         p.nombre_platillo?.toLowerCase().includes(lower) ||
-        p.descripción?.toLowerCase().includes(lower)
+        p.descripcion?.toLowerCase().includes(lower)
       );
     }
     return filtrados;
