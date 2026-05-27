@@ -56,25 +56,31 @@ const Carrito = () => {
       let idCliente = null;
 
       if (rol === "cliente") {
-        // Cliente normal autenticado
         authUserId = user.id;
       } 
       else if (rol === "admin" && localStorage.getItem("modoPOS") === "admin") {
-        // Administrador en modo POS
         idCliente = localStorage.getItem("clientePOS");
-        if (!idCliente) throw new Error("Debes seleccionar un cliente.");
+        if (!idCliente) throw new Error("Debes seleccionar un cliente antes de pagar.");
       } 
       else {
         throw new Error("No tienes permisos para realizar un pedido.");
       }
 
-      // Obtener tipo de pago
-      const { data: tipoPedidoData } = await supabase
+      // CORRECCIÓN: Determinar tipo de pedido según presencia de mesa (En local / Para llevar)
+      const esEnLocal = !!mesaId;
+      const buscarDescripcion = esEnLocal ? "En local" : "Para llevar";
+      
+      const { data: tipoPedidoData, error: tipoError } = await supabase
         .from("Tipo_pedido")
         .select("id_tipo")
-        .ilike("descripcion", `%${tipoPago}%`)
-        .limit(1);
-      const idTipo = tipoPedidoData?.[0]?.id_tipo || null;
+        .ilike("descripcion", buscarDescripcion)
+        .maybeSingle();  // usar maybeSingle para evitar error si no existe
+      
+      if (tipoError) throw tipoError;
+      const idTipo = tipoPedidoData?.id_tipo;
+      if (!idTipo) {
+        throw new Error(`No se encontró el tipo de pedido "${buscarDescripcion}" en la base de datos.`);
+      }
 
       // Insertar pedido
       const pedidoInsert = {
