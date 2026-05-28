@@ -1,4 +1,3 @@
-// views/Carrito.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert } from "react-bootstrap";
@@ -21,6 +20,7 @@ const Carrito = () => {
   const [todosExtras, setTodosExtras] = useState([]);
   const [todasSalsas, setTodasSalsas] = useState([]);
   const [itemExpandido, setItemExpandido] = useState(null);
+  const [mesaNombre] = useState(() => localStorage.getItem("mesa_nombre") || null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -41,75 +41,126 @@ const Carrito = () => {
     return (parseFloat(item.precio || 0) + precioExtra + precioSalsa) * item.cantidad;
   };
 
+  // ========== FUNCIÓN PARA ASEGURAR CLIENTE (buscar por auth_user_id o crear) ==========
+  const asegurarCliente = async (userId, metadata) => {
+    // 1. Buscar por auth_user_id en tabla Clientes
+    const { data: clienteExistente, error: buscarError } = await supabase
+      .from("Clientes")
+      .select("id_cliente, nombre_cliente, apellido_cliente")
+      .eq("auth_user_id", userId)
+      .maybeSingle();
+
+    if (buscarError) throw new Error("Error al verificar cliente: " + buscarError.message);
+
+    if (clienteExistente) {
+      // Si existe, asegurar que los metadatos del usuario tengan el id_cliente
+      const currentMeta = metadata;
+      if (!currentMeta?.id_cliente || currentMeta.id_cliente !== clienteExistente.id_cliente) {
+        await supabase.auth.updateUser({
+          data: { ...currentMeta, id_cliente: clienteExistente.id_cliente }
+        });
+      }
+      return clienteExistente.id_cliente;
+    }
+
+    // 2. No existe → crearlo con los datos del metadata (nombre, apellido, etc.)
+    const nombre = metadata?.nombre || "";
+    const apellido = metadata?.apellido || "";
+    const telefono = metadata?.telefono || null;
+    const direccion = metadata?.direccion || null;
+
+    const { data: nuevoCliente, error: insertError } = await supabase
+      .from("Clientes")
+      .insert([{
+        auth_user_id: userId,
+        nombre_cliente: nombre,
+        apellido_cliente: apellido,
+        telefono: telefono,
+        direccion: direccion,
+      }])
+      .select("id_cliente")
+      .single();
+
+    if (insertError) throw new Error("Error al crear cliente: " + insertError.message);
+
+    // Actualizar metadatos con el nuevo id_cliente
+    await supabase.auth.updateUser({
+      data: { ...metadata, id_cliente: nuevoCliente.id_cliente }
+    });
+
+    return nuevoCliente.id_cliente;
+  };
+
   const procederPago = async () => {
     if (carrito.length === 0) return;
     setError(null);
     setProcesando(true);
 
     try {
-      const mesaId = carrito[0]?.id_mesa || null;
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw new Error("No se pudo obtener el usuario.");
-
-      const rol = user?.user_metadata?.rol;
-      let authUserId = null;
-      let idCliente = null;
-
-      if (rol === "cliente") {
-        authUserId = user.id;
-      } 
-      else if (rol === "admin" && localStorage.getItem("modoPOS") === "admin") {
-        idCliente = localStorage.getItem("clientePOS");
-        if (!idCliente) throw new Error("Debes seleccionar un cliente antes de pagar.");
-      } 
-      else {
-        throw new Error("No tienes permisos para realizar un pedido.");
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData?.session;
+      if (!session) {
+        setError("Debes iniciar sesión para realizar un pedido.");
+        setProcesando(false);
+        return;
       }
 
-      // CORRECCIÓN: Determinar tipo de pedido según presencia de mesa (En local / Para llevar)
-      const esEnLocal = !!mesaId;
-      const buscarDescripcion = esEnLocal ? "En local" : "Para llevar";
-      
+      const user = session.user;
+      const metadata = user.user_metadata;
+      let idCliente = metadata?.id_cliente;
+
+      if (!idCliente) {
+        idCliente = await asegurarCliente(user.id, metadata);
+      }
+
+      // ✅ Leer mesa desde localStorage (se guarda al escanear QR)
+      const idMesa = localStorage.getItem("mesa_actual")
+        ? parseInt(localStorage.getItem("mesa_actual"), 10)
+        : null;
+
+      // ✅ Determinar tipo de pedido: En local (si hay mesa) o En línea
+      const esEnLocal = !!idMesa;
+      const buscarDescripcion = esEnLocal ? "En local" : "En línea";
+
       const { data: tipoPedidoData, error: tipoError } = await supabase
         .from("Tipo_pedido")
         .select("id_tipo")
-        .ilike("descripcion", buscarDescripcion)
-        .maybeSingle();  // usar maybeSingle para evitar error si no existe
-      
+        .ilike("descripcion", `%${buscarDescripcion}%`)
+        .maybeSingle();
+
       if (tipoError) throw tipoError;
       const idTipo = tipoPedidoData?.id_tipo;
       if (!idTipo) {
         throw new Error(`No se encontró el tipo de pedido "${buscarDescripcion}" en la base de datos.`);
       }
 
-      // Insertar pedido
-      const pedidoInsert = {
-        fecha: new Date().toISOString(),
-        id_tipo: idTipo,
-        id_mesa: mesaId,
-        estado: "Pendiente",
-        total: parseFloat(totalCarrito.toFixed(2)),
-      };
-      if (authUserId) {
-        pedidoInsert.auth_user_id = authUserId;
-      } else if (idCliente) {
-        pedidoInsert.id_cliente = parseInt(idCliente);
-      }
+      // Buscar id_tipo_pago según el método seleccionado (Efectivo/Tarjeta)
+      const { data: tipoPagoData } = await supabase
+        .from("Tipo_pago")
+        .select("id_tipo_pago")
+        .ilike("descripcion", `%${tipoPago}%`)
+        .limit(1);
+      const idTipoPago = tipoPagoData?.[0]?.id_tipo_pago || null;
 
+      // Insertar pedido
       const { data: pedidoData, error: errorPedido } = await supabase
         .from("Pedido")
-        .insert([pedidoInsert])
+        .insert([{
+          fecha: new Date().toISOString(),
+          id_cliente: idCliente,
+          id_tipo: idTipo,
+          id_tipo_pago: idTipoPago,
+          id_mesa: idMesa,
+          estado: "Pendiente",
+          total: parseFloat(totalCarrito.toFixed(2)),
+        }])
         .select();
+
       if (errorPedido) throw errorPedido;
 
       const idPedido = pedidoData[0].id_pedido;
 
-      // Marcar mesa ocupada si existe
-      if (mesaId) {
-        await supabase.from("Mesas").update({ estado: "Ocupada" }).eq("id_mesa", mesaId);
-      }
-
-      // Insertar detalles
+      // Insertar detalles del pedido
       const detalles = carrito.map(item => ({
         id_pedido: idPedido,
         id_platillo: item.id_platillo,
@@ -122,17 +173,26 @@ const Carrito = () => {
       const { error: errorDetalle } = await supabase.from("Detalle_pedido").insert(detalles);
       if (errorDetalle) throw errorDetalle;
 
+      // Opcional: Marcar mesa como ocupada si el pedido es local
+      if (idMesa) {
+        await supabase.from("Mesas").update({ estado: "Ocupada" }).eq("id_mesa", idMesa);
+      }
+
+      // Limpiar localStorage de mesa
+      localStorage.removeItem("mesa_actual");
+      localStorage.removeItem("mesa_nombre");
+
       limpiarCarrito();
-      navigate(`/mi-pedido/${idPedido}`);
+      navigate("/pedidosCliente");
     } catch (err) {
-      console.error(err);
-      setError(err.message || "Ocurrió un error al registrar el pedido.");
+      console.error("Error al procesar pedido:", err);
+      setError(err.message || "Ocurrió un error al registrar tu pedido. Intenta de nuevo.");
     } finally {
       setProcesando(false);
     }
   };
 
-  // Estilos y renderizado (sin cambios significativos)
+  // Estilos de los chips (extras/salsas)
   const estiloChipPill = (seleccionado, color) => ({
     padding: "5px 12px", borderRadius: 20, fontSize: "0.78rem",
     cursor: "pointer", fontWeight: 600, transition: "all 0.15s",
@@ -142,20 +202,50 @@ const Carrito = () => {
   });
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f5f5", padding: "32px 20px" }}>
+    <div style={{
+      minHeight: "100vh", background: "#f5f5f5",
+      fontFamily: "'Segoe UI', sans-serif", padding: "32px 20px",
+    }}>
       <div style={{ maxWidth: 700, margin: "0 auto" }}>
-        <h2 style={{ fontWeight: 800, color: "#0c0c2c" }}><i className="bi bi-cart3 me-2" style={{ color: "#ff6a00" }} /> Tu Carrito</h2>
-        {error && <Alert variant="danger">{error}</Alert>}
+        <h2 style={{ fontWeight: 800, color: "#0c0c2c", marginBottom: 6 }}>
+          <i className="bi bi-cart3 me-2" style={{ color: "#ff6a00" }} />
+          Tu Carrito
+        </h2>
+        <p style={{ color: "#6b7280", fontSize: "0.9rem", marginBottom: 28 }}>
+          Revisa y personaliza tus platillos antes de confirmar
+        </p>
+
+        {error && (
+          <Alert variant="danger" style={{ borderRadius: 10 }}>
+            <i className="bi bi-exclamation-circle me-2" />{error}
+          </Alert>
+        )}
+
         {carrito.length === 0 ? (
-          <div style={{ textAlign: "center", padding: 60, background: "white", borderRadius: 16 }}>
+          <div style={{
+            background: "white", borderRadius: 16, padding: "60px 24px",
+            textAlign: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+          }}>
             <i className="bi bi-cart-x" style={{ fontSize: "3.5rem", color: "#d1d5db" }} />
-            <p>Carrito vacío</p>
-            <button onClick={() => navigate("/menu")} style={{ background: "#ff6a00", color: "white", border: "none", borderRadius: 10, padding: "10px 24px" }}>Ver Menú</button>
+            <p style={{ color: "#9ca3af", marginTop: 16, fontSize: "1rem" }}>Tu carrito está vacío</p>
+            <button
+              onClick={() => navigate("/menu")}
+              style={{
+                marginTop: 12, background: "#ff6a00", color: "white",
+                border: "none", borderRadius: 10, padding: "10px 24px",
+                fontWeight: 700, cursor: "pointer", fontSize: "0.9rem",
+              }}
+            >
+              Ver Menú
+            </button>
           </div>
         ) : (
           <>
-            {/* Lista de productos */}
-            <div style={{ background: "white", borderRadius: 16, marginBottom: 20 }}>
+            {/* Lista de items */}
+            <div style={{
+              background: "white", borderRadius: 16,
+              boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 20, overflow: "hidden",
+            }}>
               {carrito.map((item, i) => {
                 const categoriaLower = (item.categoriaNombre || "").toLowerCase();
                 const aceptaExtras = !SIN_COMPLEMENTOS.includes(categoriaLower);
@@ -164,39 +254,70 @@ const Carrito = () => {
                 return (
                   <div key={i} style={{ borderBottom: i < carrito.length - 1 ? "1px solid #f3f4f6" : "none" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 20px" }}>
-                      <div style={{ width: 60, height: 60, borderRadius: 10, overflow: "hidden", background: "#f3f4f6" }}>
-                        {item.url_imagen ? <img src={item.url_imagen} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <i className="bi bi-image" />}
+                      <div style={{
+                        width: 60, height: 60, borderRadius: 10,
+                        overflow: "hidden", flexShrink: 0, background: "#f3f4f6",
+                      }}>
+                        {item.url_imagen ? (
+                          <img src={item.url_imagen} alt={item.nombre_platillo}
+                            style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : (
+                          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <i className="bi bi-image text-muted" />
+                          </div>
+                        )}
                       </div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 700 }}>{item.nombre_platillo}</div>
-                        {item.extraSeleccionado && <div style={{ fontSize: "0.75rem", color: "#ff6a00" }}>+ {item.extraSeleccionado.descripcion}</div>}
-                        {item.salsaSeleccionada && <div style={{ fontSize: "0.75rem", color: "#ef4444" }}>+ {item.salsaSeleccionada.descripcion}</div>}
+                        <div style={{ fontWeight: 700, fontSize: "0.92rem", color: "#0c0c2c" }}>
+                          {item.nombre_platillo}
+                        </div>
+                        {item.extraSeleccionado && (
+                          <div style={{ fontSize: "0.75rem", color: "#ff6a00" }}>
+                            + {item.extraSeleccionado.descripcion}
+                          </div>
+                        )}
+                        {item.salsaSeleccionada && (
+                          <div style={{ fontSize: "0.75rem", color: "#ef4444" }}>
+                            + {item.salsaSeleccionada.descripcion}
+                          </div>
+                        )}
                         {(aceptaExtras || aceptaSalsas) && (
-                          <button onClick={() => setItemExpandido(expandido ? null : i)} style={{ background: "none", border: "none", padding: 0, fontSize: "0.75rem", color: "#6b7280", textDecoration: "underline" }}>
-                            {expandido ? "Ocultar" : "Cambiar extras / salsas"}
+                          <button
+                            onClick={() => setItemExpandido(expandido ? null : i)}
+                            style={{
+                              background: "none", border: "none", padding: 0,
+                              fontSize: "0.75rem", color: "#6b7280",
+                              cursor: "pointer", textDecoration: "underline", marginTop: 2,
+                            }}
+                          >
+                            {expandido ? "Ocultar opciones" : "Cambiar extras / salsas"}
                           </button>
                         )}
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <button onClick={() => disminuirCantidad(i)} style={{ width: 30, height: 30, borderRadius: "50%", border: "2px solid #e5e7eb", background: "white" }}>−</button>
-                        <span style={{ fontWeight: 700 }}>{item.cantidad}</span>
-                        <button onClick={() => aumentarCantidad(i)} style={{ width: 30, height: 30, borderRadius: "50%", border: "2px solid #ff6a00", background: "#ff6a00", color: "white" }}>+</button>
+                        <button onClick={() => disminuirCantidad(i)} style={{ width: 30, height: 30, borderRadius: "50%", border: "2px solid #e5e7eb", background: "white", cursor: "pointer" }}>−</button>
+                        <span style={{ fontWeight: 700, minWidth: 20, textAlign: "center" }}>{item.cantidad}</span>
+                        <button onClick={() => aumentarCantidad(i)} style={{ width: 30, height: 30, borderRadius: "50%", border: "2px solid #ff6a00", background: "#ff6a00", cursor: "pointer", color: "white" }}>+</button>
                       </div>
                       <div style={{ minWidth: 80, textAlign: "right" }}>
-                        <div style={{ fontWeight: 800, color: "#ff6a00" }}>C${calcularSubtotalItem(item).toFixed(2)}</div>
+                        <div style={{ fontWeight: 800, color: "#ff6a00", fontSize: "0.92rem" }}>
+                          C${calcularSubtotalItem(item).toFixed(2)}
+                        </div>
                       </div>
-                      <button onClick={() => eliminarDelCarrito(i)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer" }}><i className="bi bi-trash" /></button>
+                      <button onClick={() => eliminarDelCarrito(i)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "1.1rem" }}>
+                        <i className="bi bi-trash" />
+                      </button>
                     </div>
                     {expandido && (
                       <div style={{ padding: "0 20px 16px", background: "#fafafa" }}>
                         {aceptaExtras && todosExtras.length > 0 && (
                           <div style={{ marginBottom: 12 }}>
-                            <p style={{ fontWeight: 700, fontSize: "0.82rem" }}>Extras</p>
+                            <p style={{ fontWeight: 700, fontSize: "0.82rem", color: "#374151", marginBottom: 6 }}>Extras</p>
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                               <div onClick={() => actualizarExtra(i, null)} style={estiloChipPill(!item.extraSeleccionado, "#ff6a00")}>Ninguno</div>
                               {todosExtras.map(extra => (
                                 <div key={extra.id_extra} onClick={() => actualizarExtra(i, item.extraSeleccionado?.id_extra === extra.id_extra ? null : extra)} style={estiloChipPill(item.extraSeleccionado?.id_extra === extra.id_extra, "#ff6a00")}>
-                                  {extra.descripcion} (+C${extra.precio})
+                                  {extra.descripcion} (+C${parseFloat(extra.precio || 0).toFixed(2)})
                                 </div>
                               ))}
                             </div>
@@ -204,12 +325,12 @@ const Carrito = () => {
                         )}
                         {aceptaSalsas && todasSalsas.length > 0 && (
                           <div>
-                            <p style={{ fontWeight: 700, fontSize: "0.82rem" }}>Salsas</p>
+                            <p style={{ fontWeight: 700, fontSize: "0.82rem", color: "#374151", marginBottom: 6 }}>Salsas</p>
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                               <div onClick={() => actualizarSalsa(i, null)} style={estiloChipPill(!item.salsaSeleccionada, "#ef4444")}>Ninguna</div>
                               {todasSalsas.map(salsa => (
                                 <div key={salsa.id_salsa} onClick={() => actualizarSalsa(i, item.salsaSeleccionada?.id_salsa === salsa.id_salsa ? null : salsa)} style={estiloChipPill(item.salsaSeleccionada?.id_salsa === salsa.id_salsa, "#ef4444")}>
-                                  {salsa.descripcion} (+C${salsa.precio})
+                                  {salsa.descripcion} (+C${parseFloat(salsa.precio || 0).toFixed(2)})
                                 </div>
                               ))}
                             </div>
@@ -223,27 +344,58 @@ const Carrito = () => {
             </div>
 
             {/* Tipo de pago */}
-            <div style={{ background: "white", borderRadius: 16, padding: "20px 24px", marginBottom: 20 }}>
-              <h5>Tipo de pago</h5>
+            <div style={{ background: "white", borderRadius: 16, padding: "20px 24px", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 20 }}>
+              <h5 style={{ fontWeight: 700, color: "#0c0c2c", marginBottom: 16 }}>Tipo de pago</h5>
               <div style={{ display: "flex", gap: 12 }}>
                 {["Efectivo", "Tarjeta"].map(tipo => (
-                  <div key={tipo} onClick={() => setTipoPago(tipo)} style={{ flex: 1, padding: "14px 16px", borderRadius: 12, cursor: "pointer", border: `2px solid ${tipoPago === tipo ? "#ff6a00" : "#e5e7eb"}`, textAlign: "center" }}>
+                  <div key={tipo} onClick={() => setTipoPago(tipo)} style={{ flex: 1, padding: "14px 16px", borderRadius: 12, cursor: "pointer", border: `2px solid ${tipoPago === tipo ? "#ff6a00" : "#e5e7eb"}`, background: tipoPago === tipo ? "rgba(255,106,0,0.05)" : "white", textAlign: "center" }}>
                     <i className={`bi ${tipo === "Efectivo" ? "bi-cash" : "bi-credit-card"}`} style={{ fontSize: "1.5rem", display: "block", marginBottom: 6, color: tipoPago === tipo ? "#ff6a00" : "#9ca3af" }} />
-                    <span>{tipo}</span>
+                    <span style={{ fontWeight: 700, fontSize: "0.9rem", color: tipoPago === tipo ? "#ff6a00" : "#374151" }}>{tipo}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Resumen */}
-            <div style={{ background: "white", borderRadius: 16, padding: "20px 24px", marginBottom: 20 }}>
-              <h5>Resumen</h5>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}><span>Subtotal</span><span>C${totalCarrito.toFixed(2)}</span></div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total</span><span style={{ fontWeight: 800, fontSize: "1.2rem", color: "#ff6a00" }}>C${totalCarrito.toFixed(2)}</span></div>
+            <div style={{ background: "white", borderRadius: 16, padding: "20px 24px", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 20 }}>
+              <h5 style={{ fontWeight: 700, color: "#0c0c2c", marginBottom: 14 }}>Resumen</h5>
+              {mesaNombre && (
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ color: "#6b7280", fontSize: "0.9rem" }}>Mesa</span>
+                  <span style={{ fontWeight: 600 }}>{mesaNombre}</span>
+                </div>
+              )}
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                <span style={{ color: "#6b7280", fontSize: "0.9rem" }}>Subtotal</span>
+                <span style={{ fontWeight: 600 }}>C${totalCarrito.toFixed(2)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                <span style={{ color: "#6b7280", fontSize: "0.9rem" }}>Método de pago</span>
+                <span style={{ fontWeight: 600 }}>{tipoPago}</span>
+              </div>
+              <hr style={{ margin: "14px 0" }} />
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontWeight: 800, fontSize: "1rem" }}>Total</span>
+                <span style={{ fontWeight: 800, fontSize: "1.2rem", color: "#ff6a00" }}>C${totalCarrito.toFixed(2)}</span>
+              </div>
             </div>
 
-            <button onClick={procederPago} disabled={procesando} style={{ width: "100%", padding: "15px", background: procesando ? "#9ca3af" : "#ff6a00", color: "white", border: "none", borderRadius: 14, fontWeight: 800 }}>
-              {procesando ? "Procesando..." : `Proceder al Pago — C${totalCarrito.toFixed(2)}`}
+            <button
+              onClick={procederPago}
+              disabled={procesando}
+              style={{
+                width: "100%", padding: "15px",
+                background: procesando ? "#9ca3af" : "#ff6a00",
+                color: "white", border: "none", borderRadius: 14,
+                fontWeight: 800, fontSize: "1rem",
+                cursor: procesando ? "not-allowed" : "pointer",
+                boxShadow: "0 4px 14px rgba(255,106,0,0.35)",
+              }}
+            >
+              {procesando
+                ? <><i className="bi bi-hourglass-split me-2" />Procesando...</>
+                : <><i className="bi bi-check-circle me-2" />Proceder al Pago — C${totalCarrito.toFixed(2)}</>
+              }
             </button>
           </>
         )}

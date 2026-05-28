@@ -381,4 +381,4 @@ const Pedidos = () => {
   );
 };
 
-export default Pedidos;
+export default Pedidos; 

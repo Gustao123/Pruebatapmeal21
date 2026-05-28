@@ -8,7 +8,7 @@ const RegistroCliente = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
-  const mesaId = queryParams.get("mesa");
+  const mesaId = queryParams.get("mesa") || null; // si viene de QR
 
   const [form, setForm] = useState({
     nombre: "",
@@ -31,7 +31,6 @@ const RegistroCliente = () => {
   const registrar = async () => {
     setError(null);
 
-    // Validaciones
     if (!form.nombre.trim() || !form.apellido.trim() || !form.correo.trim() || !form.contrasena.trim()) {
       setError("Por favor completa todos los campos obligatorios.");
       return;
@@ -54,8 +53,8 @@ const RegistroCliente = () => {
       setCargando(true);
       const emailLower = form.correo.trim().toLowerCase();
 
-      // Crear usuario en Auth con todos los datos en user_metadata
-      const { error: errorAuth } = await supabase.auth.signUp({
+      // 1. Crear usuario en Auth
+      const { data: authData, error: errorAuth } = await supabase.auth.signUp({
         email: emailLower,
         password: form.contrasena,
         options: {
@@ -63,8 +62,6 @@ const RegistroCliente = () => {
             rol: "cliente",
             nombre: form.nombre.trim(),
             apellido: form.apellido.trim(),
-            telefono: form.telefono.trim() || null,
-            direccion: form.direccion.trim() || null,
           },
         },
       });
@@ -78,16 +75,50 @@ const RegistroCliente = () => {
         return;
       }
 
-      // (Opcional) Si quieres mantener la tabla Clientes, puedes insertar aquí usando el nuevo UUID.
-      // Pero ya no es necesario para el funcionamiento básico.
+      if (!authData.user) throw new Error("No se pudo obtener el usuario");
 
-      // Redirigir
+      // 2. Insertar en tabla Clientes con auth_user_id
+      const { data: nuevoCliente, error: errorCliente } = await supabase
+        .from("Clientes")
+        .insert([
+          {
+            auth_user_id: authData.user.id,
+            nombre_cliente: form.nombre.trim(),
+            apellido_cliente: form.apellido.trim(),
+            telefono: form.telefono.trim() || null,
+            direccion: form.direccion.trim() || null,
+          },
+        ])
+        .select()
+        .single();
+
+      if (errorCliente) {
+        console.error("Error al guardar en Clientes:", errorCliente);
+        setError("Error al completar el registro. Contacta al soporte.");
+        return;
+      }
+
+      // 3. Actualizar metadatos del usuario con el id_cliente
+      const idCliente = nuevoCliente.id_cliente;
+      await supabase.auth.updateUser({
+        data: {
+          rol: "cliente",
+          id_cliente: idCliente,
+          nombre: form.nombre.trim(),
+          apellido: form.apellido.trim(),
+        },
+      });
+
+      // 4. Redirigir según si viene de mesa o no
       localStorage.setItem("usuario-supabase", emailLower);
-      navigate(mesaId ? `/menu/${mesaId}` : "/menu");
-
+      if (mesaId) {
+        navigate(`/menu/${mesaId}`);
+      } else {
+        navigate("/menu");
+      }
     } catch (err) {
-      console.error(err);
       setError("Error inesperado. Intenta de nuevo.");
+      console.error(err);
     } finally {
       setCargando(false);
     }
