@@ -6,6 +6,8 @@ const TarjetaPedido = ({
   pedidos,
   abrirModalEdicion,
   abrirModalEliminacion,
+  onVerVoucher,    // nueva prop
+  onVerFactura     // nueva prop
 }) => {
   const [cargando, setCargando] = useState(true);
   const [idTarjetaActiva, setIdTarjetaActiva] = useState(null);
@@ -27,7 +29,6 @@ const TarjetaPedido = ({
     setIdTarjetaActiva((anterior) => (anterior === id ? null : id));
   };
 
-  // Función para formatear fecha
   const formatearFecha = (fecha) => {
     if (!fecha) return "Sin fecha";
     const date = new Date(fecha);
@@ -74,14 +75,12 @@ const TarjetaPedido = ({
                   }`}
                 >
                   <Row className="align-items-center gx-3">
-                    {/* Icono / Imagen representativa */}
                     <Col xs={3} md={2} className="px-2">
                       <div className="bg-light d-flex align-items-center justify-content-center rounded tarjeta-pedido-placeholder-imagen">
                         <i className="bi bi-receipt text-primary fs-3"></i>
                       </div>
                     </Col>
 
-                    {/* Información principal del pedido */}
                     <Col xs={5} md={6} className="text-start">
                       <div className="fw-semibold">
                         Pedido #{pedido.id_pedido}
@@ -96,7 +95,6 @@ const TarjetaPedido = ({
                       </div>
                     </Col>
 
-                    {/* Estado y Fecha */}
                     <Col xs={4} md={4} className="d-flex flex-column align-items-end justify-content-center text-end">
                       <div className={`badge ${pedido.estado === 'Pendiente' ? 'bg-warning' : 
                         pedido.estado === 'Completado' ? 'bg-success' : 'bg-secondary'}`}>
@@ -109,7 +107,6 @@ const TarjetaPedido = ({
                   </Row>
                 </Card.Body>
 
-                {/* Capa de acciones cuando la tarjeta está activa */}
                 {tarjetaActiva && (
                   <div
                     role="dialog"
@@ -124,6 +121,28 @@ const TarjetaPedido = ({
                       className="d-flex gap-2 tarjeta-pedido-botones-capa"
                       onClick={(e) => e.stopPropagation()}
                     >
+                      <Button
+                        variant="outline-info"
+                        size="sm"
+                        onClick={() => {
+                          onVerVoucher(pedido.id_pedido);
+                          setIdTarjetaActiva(null);
+                        }}
+                        title="Voucher cocina"
+                      >
+                        <i className="bi bi-receipt"></i>
+                      </Button>
+                      <Button
+                        variant="outline-success"
+                        size="sm"
+                        onClick={() => {
+                          onVerFactura(pedido.id_pedido);
+                          setIdTarjetaActiva(null);
+                        }}
+                        title="Factura"
+                      >
+                        <i className="bi bi-file-text"></i>
+                      </Button>
                       <Button
                         variant="outline-warning"
                         size="sm"

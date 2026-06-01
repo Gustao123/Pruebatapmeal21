@@ -23,12 +23,6 @@ const Carrito = () => {
   const [itemExpandido, setItemExpandido] = useState(null);
   const navigate = useNavigate();
 
-  // Leer mesa guardada en localStorage (desde Menu.jsx)
-  const idMesa = localStorage.getItem("mesa_actual") 
-    ? parseInt(localStorage.getItem("mesa_actual"), 10) 
-    : null;
-  const mesaNombre = localStorage.getItem("mesa_nombre") || null;
-
   useEffect(() => {
     const cargarComplementos = async () => {
       const [resExtras, resSalsas] = await Promise.all([
@@ -47,112 +41,69 @@ const Carrito = () => {
     return (parseFloat(item.precio || 0) + precioExtra + precioSalsa) * item.cantidad;
   };
 
-  // ========== FUNCIÓN PARA ASEGURAR CLIENTE (buscar/crear por auth_user_id) ==========
-  const asegurarCliente = async (userId, metadata) => {
-    const { data: clienteExistente, error: buscarError } = await supabase
-      .from("Clientes")
-      .select("id_cliente")
-      .eq("auth_user_id", userId)
-      .maybeSingle();
-
-    if (buscarError) throw new Error("Error al verificar cliente: " + buscarError.message);
-    if (clienteExistente) return clienteExistente.id_cliente;
-
-    const nombre = metadata?.nombre || "";
-    const apellido = metadata?.apellido || "";
-    const telefono = metadata?.telefono || null;
-    const direccion = metadata?.direccion || null;
-
-    const { data: nuevoCliente, error: insertError } = await supabase
-      .from("Clientes")
-      .insert([{
-        auth_user_id: userId,
-        nombre_cliente: nombre,
-        apellido_cliente: apellido,
-        telefono: telefono,
-        direccion: direccion,
-      }])
-      .select("id_cliente")
-      .single();
-
-    if (insertError) throw new Error("Error al crear cliente: " + insertError.message);
-
-    await supabase.auth.updateUser({
-      data: { ...metadata, id_cliente: nuevoCliente.id_cliente }
-    });
-
-    return nuevoCliente.id_cliente;
-  };
-
   const procederPago = async () => {
     if (carrito.length === 0) return;
     setError(null);
     setProcesando(true);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const session = sessionData?.session;
-      if (!session) {
-        setError("Debes iniciar sesión para realizar un pedido.");
-        setProcesando(false);
-        return;
+      const mesaId = carrito[0]?.id_mesa || null;
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw new Error("No se pudo obtener el usuario.");
+
+      const rol = user?.user_metadata?.rol;
+      let authUserId = null;
+      let idCliente = null;
+
+      if (rol === "cliente") {
+        // Cliente normal autenticado
+        authUserId = user.id;
+      } 
+      else if (rol === "admin" && localStorage.getItem("modoPOS") === "admin") {
+        // Administrador en modo POS
+        idCliente = localStorage.getItem("clientePOS");
+        if (!idCliente) throw new Error("Debes seleccionar un cliente.");
+      } 
+      else {
+        throw new Error("No tienes permisos para realizar un pedido.");
       }
 
-      const user = session.user;
-      const metadata = user.user_metadata;
-      let idCliente = metadata?.id_cliente;
-      if (!idCliente) {
-        idCliente = await asegurarCliente(user.id, metadata);
-      }
-
-      // ✅ Leer mesa desde localStorage (guardada en Menu.jsx)
-      const idMesaLocal = localStorage.getItem("mesa_actual")
-        ? parseInt(localStorage.getItem("mesa_actual"), 10)
-        : null;
-
-      // ✅ Determinar tipo de pedido según si hay mesa o no
-      const esEnLocal = !!idMesaLocal;
-      const buscarDescripcion = esEnLocal ? "En local" : "En línea";
-
-      const { data: tipoPedidoData, error: tipoError } = await supabase
+      // Obtener tipo de pago
+      const { data: tipoPedidoData } = await supabase
         .from("Tipo_pedido")
         .select("id_tipo")
-        .ilike("descripcion", buscarDescripcion)
-        .maybeSingle();
-
-      if (tipoError) throw tipoError;
-      const idTipo = tipoPedidoData?.id_tipo;
-      if (!idTipo) {
-        throw new Error(`No se encontró el tipo de pedido "${buscarDescripcion}" en la base de datos.`);
-      }
-
-      // Buscar id_tipo_pago (Efectivo / Tarjeta)
-      const { data: tipoPagoData } = await supabase
-        .from("Tipo_pago")
-        .select("id_tipo_pago")
-        .ilike("descripcion", tipoPago)
-        .maybeSingle();
-      const idTipoPago = tipoPagoData?.id_tipo_pago || null;
+        .ilike("descripcion", `%${tipoPago}%`)
+        .limit(1);
+      const idTipo = tipoPedidoData?.[0]?.id_tipo || null;
 
       // Insertar pedido
+      const pedidoInsert = {
+        fecha: new Date().toISOString(),
+        id_tipo: idTipo,
+        id_mesa: mesaId,
+        estado: "Pendiente",
+        total: parseFloat(totalCarrito.toFixed(2)),
+      };
+      if (authUserId) {
+        pedidoInsert.auth_user_id = authUserId;
+      } else if (idCliente) {
+        pedidoInsert.id_cliente = parseInt(idCliente);
+      }
+
       const { data: pedidoData, error: errorPedido } = await supabase
         .from("Pedido")
-        .insert([{
-          fecha: new Date().toISOString(),
-          id_cliente: idCliente,
-          id_tipo: idTipo,
-          id_tipo_pago: idTipoPago,
-          id_mesa: idMesaLocal,
-          estado: "Pendiente",
-          total: parseFloat(totalCarrito.toFixed(2)),
-        }])
+        .insert([pedidoInsert])
         .select();
-
       if (errorPedido) throw errorPedido;
 
       const idPedido = pedidoData[0].id_pedido;
 
-      // Detalles del pedido
+      // Marcar mesa ocupada si existe
+      if (mesaId) {
+        await supabase.from("Mesas").update({ estado: "Ocupada" }).eq("id_mesa", mesaId);
+      }
+
+      // Insertar detalles
       const detalles = carrito.map(item => ({
         id_pedido: idPedido,
         id_platillo: item.id_platillo,
@@ -165,25 +116,17 @@ const Carrito = () => {
       const { error: errorDetalle } = await supabase.from("Detalle_pedido").insert(detalles);
       if (errorDetalle) throw errorDetalle;
 
-      // Opcional: marcar mesa como ocupada
-      if (idMesaLocal) {
-        await supabase.from("Mesas").update({ estado: "Ocupada" }).eq("id_mesa", idMesaLocal);
-      }
-
-      // Limpiar localStorage y carrito
-      localStorage.removeItem("mesa_actual");
-      localStorage.removeItem("mesa_nombre");
       limpiarCarrito();
-      navigate("/pedidosCliente");
+      navigate(`/mi-pedido/${idPedido}`);
     } catch (err) {
-      console.error("Error al procesar pedido:", err);
-      setError(err.message || "Ocurrió un error al registrar tu pedido.");
+      console.error(err);
+      setError(err.message || "Ocurrió un error al registrar el pedido.");
     } finally {
       setProcesando(false);
     }
   };
 
-  // Estilos (sin cambios)
+  // Estilos y renderizado (sin cambios significativos)
   const estiloChipPill = (seleccionado, color) => ({
     padding: "5px 12px", borderRadius: 20, fontSize: "0.78rem",
     cursor: "pointer", fontWeight: 600, transition: "all 0.15s",
@@ -193,25 +136,20 @@ const Carrito = () => {
   });
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f5f5", fontFamily: "'Segoe UI', sans-serif", padding: "32px 20px" }}>
+    <div style={{ minHeight: "100vh", background: "#f5f5f5", padding: "32px 20px" }}>
       <div style={{ maxWidth: 700, margin: "0 auto" }}>
-        <h2 style={{ fontWeight: 800, color: "#0c0c2c", marginBottom: 6 }}>
-          <i className="bi bi-cart3 me-2" style={{ color: "#ff6a00" }} /> Tu Carrito
-        </h2>
-        <p style={{ color: "#6b7280", fontSize: "0.9rem", marginBottom: 28 }}>Revisa y personaliza tus platillos antes de confirmar</p>
-
+        <h2 style={{ fontWeight: 800, color: "#0c0c2c" }}><i className="bi bi-cart3 me-2" style={{ color: "#ff6a00" }} /> Tu Carrito</h2>
         {error && <Alert variant="danger">{error}</Alert>}
-
         {carrito.length === 0 ? (
-          <div style={{ background: "white", borderRadius: 16, padding: "60px 24px", textAlign: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+          <div style={{ textAlign: "center", padding: 60, background: "white", borderRadius: 16 }}>
             <i className="bi bi-cart-x" style={{ fontSize: "3.5rem", color: "#d1d5db" }} />
-            <p style={{ color: "#9ca3af", marginTop: 16 }}>Tu carrito está vacío</p>
-            <button onClick={() => navigate("/menu")} style={{ marginTop: 12, background: "#ff6a00", color: "white", border: "none", borderRadius: 10, padding: "10px 24px", fontWeight: 700, cursor: "pointer" }}>Ver Menú</button>
+            <p>Carrito vacío</p>
+            <button onClick={() => navigate("/menu")} style={{ background: "#ff6a00", color: "white", border: "none", borderRadius: 10, padding: "10px 24px" }}>Ver Menú</button>
           </div>
         ) : (
           <>
             {/* Lista de productos */}
-            <div style={{ background: "white", borderRadius: 16, boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 20, overflow: "hidden" }}>
+            <div style={{ background: "white", borderRadius: 16, marginBottom: 20 }}>
               {carrito.map((item, i) => {
                 const categoriaLower = (item.categoriaNombre || "").toLowerCase();
                 const aceptaExtras = !SIN_COMPLEMENTOS.includes(categoriaLower);
@@ -220,7 +158,7 @@ const Carrito = () => {
                 return (
                   <div key={i} style={{ borderBottom: i < carrito.length - 1 ? "1px solid #f3f4f6" : "none" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 20px" }}>
-                      <div style={{ width: 60, height: 60, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: "#f3f4f6" }}>
+                      <div style={{ width: 60, height: 60, borderRadius: 10, overflow: "hidden", background: "#f3f4f6" }}>
                         {item.url_imagen ? <img src={item.url_imagen} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <i className="bi bi-image" />}
                       </div>
                       <div style={{ flex: 1 }}>
@@ -234,9 +172,9 @@ const Carrito = () => {
                         )}
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <button onClick={() => disminuirCantidad(i)} style={{ width: 30, height: 30, borderRadius: "50%", border: "2px solid #e5e7eb", background: "white", cursor: "pointer" }}>−</button>
+                        <button onClick={() => disminuirCantidad(i)} style={{ width: 30, height: 30, borderRadius: "50%", border: "2px solid #e5e7eb", background: "white" }}>−</button>
                         <span style={{ fontWeight: 700 }}>{item.cantidad}</span>
-                        <button onClick={() => aumentarCantidad(i)} style={{ width: 30, height: 30, borderRadius: "50%", border: "2px solid #ff6a00", background: "#ff6a00", color: "white", cursor: "pointer" }}>+</button>
+                        <button onClick={() => aumentarCantidad(i)} style={{ width: 30, height: 30, borderRadius: "50%", border: "2px solid #ff6a00", background: "#ff6a00", color: "white" }}>+</button>
                       </div>
                       <div style={{ minWidth: 80, textAlign: "right" }}>
                         <div style={{ fontWeight: 800, color: "#ff6a00" }}>C${calcularSubtotalItem(item).toFixed(2)}</div>
@@ -279,7 +217,7 @@ const Carrito = () => {
             </div>
 
             {/* Tipo de pago */}
-            <div style={{ background: "white", borderRadius: 16, padding: "20px 24px", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 20 }}>
+            <div style={{ background: "white", borderRadius: 16, padding: "20px 24px", marginBottom: 20 }}>
               <h5>Tipo de pago</h5>
               <div style={{ display: "flex", gap: 12 }}>
                 {["Efectivo", "Tarjeta"].map(tipo => (
@@ -292,30 +230,13 @@ const Carrito = () => {
             </div>
 
             {/* Resumen */}
-            <div style={{ background: "white", borderRadius: 16, padding: "20px 24px", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", marginBottom: 20 }}>
+            <div style={{ background: "white", borderRadius: 16, padding: "20px 24px", marginBottom: 20 }}>
               <h5>Resumen</h5>
-              {mesaNombre && (
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                  <span>Mesa</span>
-                  <span><strong>{mesaNombre}</strong></span>
-                </div>
-              )}
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                <span>Subtotal</span>
-                <span>C${totalCarrito.toFixed(2)}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                <span>Método de pago</span>
-                <span>{tipoPago}</span>
-              </div>
-              <hr />
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <strong>Total</strong>
-                <strong style={{ color: "#ff6a00", fontSize: "1.2rem" }}>C${totalCarrito.toFixed(2)}</strong>
-              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}><span>Subtotal</span><span>C${totalCarrito.toFixed(2)}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total</span><span style={{ fontWeight: 800, fontSize: "1.2rem", color: "#ff6a00" }}>C${totalCarrito.toFixed(2)}</span></div>
             </div>
 
-            <button onClick={procederPago} disabled={procesando} style={{ width: "100%", padding: "15px", background: procesando ? "#9ca3af" : "#ff6a00", color: "white", border: "none", borderRadius: 14, fontWeight: 800, cursor: procesando ? "not-allowed" : "pointer" }}>
+            <button onClick={procederPago} disabled={procesando} style={{ width: "100%", padding: "15px", background: procesando ? "#9ca3af" : "#ff6a00", color: "white", border: "none", borderRadius: 14, fontWeight: 800 }}>
               {procesando ? "Procesando..." : `Proceder al Pago — C${totalCarrito.toFixed(2)}`}
             </button>
           </>
@@ -325,4 +246,4 @@ const Carrito = () => {
   );
 };
 
-export default Carrito;
+export default Carrito; 

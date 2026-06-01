@@ -5,7 +5,9 @@ import "bootstrap-icons/font/bootstrap-icons.css";
 const TablaPedido = ({
   pedidos,
   abrirModalEdicion,
-  abrirModalEliminacion
+  abrirModalEliminacion,
+  onVerVoucher,    // nueva prop
+  onVerFactura     // nueva prop
 }) => {
   const [loading, setLoading] = useState(true);
 
@@ -86,6 +88,26 @@ const TablaPedido = ({
                 </td>
 
                 <td className="text-center">
+                  <Button
+                    variant="outline-info"
+                    size="sm"
+                    className="m-1"
+                    onClick={() => onVerVoucher(pedido.id_pedido)}
+                    title="Voucher para cocina"
+                  >
+                    <i className="bi bi-receipt"></i>
+                  </Button>
+
+                  <Button
+                    variant="outline-success"
+                    size="sm"
+                    className="m-1"
+                    onClick={() => onVerFactura(pedido.id_pedido)}
+                    title="Factura"
+                  >
+                    <i className="bi bi-file-text"></i>
+                  </Button>
+
                   <Button
                     variant="outline-warning"
                     size="sm"
