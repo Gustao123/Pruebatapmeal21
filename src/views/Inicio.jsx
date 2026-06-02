@@ -1,3 +1,4 @@
+// views/Inicio.jsx
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Html5Qrcode } from "html5-qrcode";
@@ -70,14 +71,14 @@ export default function Inicio() {
         const config = { fps: 10, qrbox: { width: 250, height: 250 } };
 
         await html5QrCode.start(
-          { facingMode: "environment" }, // cámara trasera
+          { facingMode: "environment" },
           config,
           (decodedText) => {
-            // ✅ Extraer número de mesa del texto escaneado
+            // ✅ CORRECCIÓN: extraer número después de "/menu/"
             let numeroMesa = null;
-            const match = decodedText.match(/\d+/); // busca el primer grupo de dígitos
-            if (match) {
-              numeroMesa = parseInt(match[0], 10);
+            const menuMatch = decodedText.match(/\/menu\/(\d+)/);
+            if (menuMatch) {
+              numeroMesa = parseInt(menuMatch[1], 10);
             }
 
             if (numeroMesa && !isNaN(numeroMesa)) {
@@ -85,10 +86,12 @@ export default function Inicio() {
               setScannerIniciado(false);
               setCamaraActiva(false);
               setMostrarScanner(false);
+              // Limpiar residuos de mesas anteriores
+              localStorage.removeItem("mesa_actual");
+              localStorage.removeItem("mesa_nombre");
               navigate(`/menu/${numeroMesa}`);
             } else {
               alert("El código QR no contiene un número de mesa válido.\n\nContenido escaneado: " + decodedText);
-              // Opcional: reiniciar escáner
             }
           },
           (errorMessage) => {

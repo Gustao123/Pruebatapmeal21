@@ -25,32 +25,38 @@ const Menu = () => {
   const { idMesa } = useParams();
   const [nombreMesa, setNombreMesa] = useState("");
 
-  // ✅ Guardar la mesa en localStorage si existe
+  // ✅ Manejo de mesa: limpiar residuos y guardar la correcta
   useEffect(() => {
+    // Si hay un idMesa en la URL, lo usamos; si no, limpiamos todo
     if (idMesa) {
-      // Guardamos la mesa con clave "mesa_actual" (la que usará Carrito.jsx)
-      localStorage.setItem("mesa_actual", idMesa);
+      const idNumerico = parseInt(idMesa, 10);
+      // Verificar si ya hay una mesa guardada y si es diferente, limpiar
+      const guardada = localStorage.getItem("mesa_actual");
+      if (guardada && parseInt(guardada, 10) !== idNumerico) {
+        localStorage.removeItem("mesa_actual");
+        localStorage.removeItem("mesa_nombre");
+      }
+      localStorage.setItem("mesa_actual", idNumerico);
       
       const cargarNombreMesa = async () => {
         try {
           const { data, error } = await supabase
             .from("Mesas")
             .select("nombre_mesa")
-            .eq("id_mesa", idMesa)
+            .eq("id_mesa", idNumerico)
             .single();
           if (error) throw error;
-          const nombre = data?.nombre_mesa || `Mesa ${idMesa}`;
+          const nombre = data?.nombre_mesa || `Mesa ${idNumerico}`;
           setNombreMesa(nombre);
           localStorage.setItem("mesa_nombre", nombre);
         } catch {
-          const nombre = `Mesa ${idMesa}`;
+          const nombre = `Mesa ${idNumerico}`;
           setNombreMesa(nombre);
           localStorage.setItem("mesa_nombre", nombre);
         }
       };
       cargarNombreMesa();
     } else {
-      // No hay mesa, limpiamos
       localStorage.removeItem("mesa_actual");
       localStorage.removeItem("mesa_nombre");
       setNombreMesa("");
