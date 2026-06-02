@@ -25,10 +25,12 @@ const Menu = () => {
   const { idMesa } = useParams();
   const [nombreMesa, setNombreMesa] = useState("");
 
-  // Cargar nombre de la mesa si existe
+  // ✅ Guardar la mesa en localStorage si existe
   useEffect(() => {
     if (idMesa) {
-      localStorage.setItem("idMesa", idMesa);
+      // Guardamos la mesa con clave "mesa_actual" (la que usará Carrito.jsx)
+      localStorage.setItem("mesa_actual", idMesa);
+      
       const cargarNombreMesa = async () => {
         try {
           const { data, error } = await supabase
@@ -37,19 +39,25 @@ const Menu = () => {
             .eq("id_mesa", idMesa)
             .single();
           if (error) throw error;
-          setNombreMesa(data?.nombre_mesa || `Mesa ${idMesa}`);
+          const nombre = data?.nombre_mesa || `Mesa ${idMesa}`;
+          setNombreMesa(nombre);
+          localStorage.setItem("mesa_nombre", nombre);
         } catch {
-          setNombreMesa(`Mesa ${idMesa}`);
+          const nombre = `Mesa ${idMesa}`;
+          setNombreMesa(nombre);
+          localStorage.setItem("mesa_nombre", nombre);
         }
       };
       cargarNombreMesa();
     } else {
-      localStorage.removeItem("idMesa");
+      // No hay mesa, limpiamos
+      localStorage.removeItem("mesa_actual");
+      localStorage.removeItem("mesa_nombre");
       setNombreMesa("");
     }
   }, [idMesa]);
 
-  // Verificar sesión y obtener datos del cliente
+  // Verificar sesión (sin cambios relevantes)
   useEffect(() => {
     const verificarSesion = async () => {
       try {
@@ -70,11 +78,9 @@ const Menu = () => {
         else if (user && rol === "cliente") {
           setSesionActiva(true);
           setEsAdmin(false);
-          // Limpiar cualquier residuo de modo POS
           localStorage.removeItem("modoPOS");
           localStorage.removeItem("clientePOS");
           
-          // Obtener nombre desde user_metadata
           const metadata = user.user_metadata;
           const nombre = metadata?.nombre || "";
           const apellido = metadata?.apellido || "";
@@ -165,7 +171,6 @@ const Menu = () => {
           )}
         </div>
 
-        {/* CORRECCIÓN: al seleccionar cliente en modo admin, guardar en localStorage */}
         {esAdmin && clientes.length > 0 && (
           <div style={{ marginBottom: 20, background: "white", borderRadius: 12, padding: "14px 18px" }}>
             <label style={{ fontWeight: 600, marginRight: 10 }}>Cliente:</label>
