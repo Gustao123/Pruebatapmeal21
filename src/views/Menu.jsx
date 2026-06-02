@@ -103,7 +103,7 @@ const Menu = () => {
     verificarSesion();
   }, []);
 
-  // Cargar menú
+  // Cargar menú (sin cambios)
   useEffect(() => {
     const cargarMenu = async () => {
       setCargando(true);
@@ -174,25 +174,9 @@ const Menu = () => {
         {esAdmin && clientes.length > 0 && (
           <div style={{ marginBottom: 20, background: "white", borderRadius: 12, padding: "14px 18px" }}>
             <label style={{ fontWeight: 600, marginRight: 10 }}>Cliente:</label>
-            <select
-              value={clienteSeleccionado}
-              onChange={(e) => {
-                const id = e.target.value;
-                setClienteSeleccionado(id);
-                if (id) {
-                  localStorage.setItem("clientePOS", id);
-                } else {
-                  localStorage.removeItem("clientePOS");
-                }
-              }}
-              style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #ccc" }}
-            >
+            <select value={clienteSeleccionado} onChange={(e) => setClienteSeleccionado(e.target.value)} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #ccc" }}>
               <option value="">-- Seleccionar --</option>
-              {clientes.map(c => (
-                <option key={c.id_cliente} value={c.id_cliente}>
-                  {c.nombre_cliente} {c.apellido_cliente}
-                </option>
-              ))}
+              {clientes.map(c => <option key={c.id_cliente} value={c.id_cliente}>{c.nombre_cliente} {c.apellido_cliente}</option>)}
             </select>
             {!clienteSeleccionado && <span className="text-danger ms-2 small">Debes elegir un cliente</span>}
           </div>
